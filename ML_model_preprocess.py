@@ -4,7 +4,7 @@ import os
 
 def iterate_files(dir_path):
     """
-    A function for iterate files in a directory
+    A function to iterate over files in a directory
     """
     for dirpath, dirnames, filenames in os.walk(dir_path):
         for filename in filenames:
