@@ -9,19 +9,25 @@ def iterate_files(dir_path):
             yield file_path
 
 
-def make_test_training_validation_file_sets(dic):
+def make_test_training_validation_file_sets_with_labels(dic):
     valid_file_dic = {}
-    for val in dic.values():
+    count = {}
+    for key, val in dic.items():
+        count[key] = 0
         for file in val:
-            if file in valid_file_dic.keys():
+            if file in valid_file_dic.keys() or count[key] >= 10000:  # putting a boundary for the amount of  files
+                # with the same label
                 continue
             else:
-                valid_file_dic[file] = 1
-    valid_file_names = list(valid_file_dic.keys())
-    random.shuffle(valid_file_names)
-    training_files = valid_file_names[:int(0.7 * len(valid_file_names))]
-    test_files = valid_file_names[int(0.7 * len(valid_file_names)):int(0.85 * len(valid_file_names))]
-    validation_files = valid_file_names[int(0.85 * len(valid_file_names)):]
+                valid_file_dic[file] = key
+                count[key] += 1
+
+    valid_file_names_and_labels = [("HR" + key + ".mat", valid_file_dic[key]) for key in valid_file_dic.keys()]
+    random.shuffle(valid_file_names_and_labels)
+    training_files = valid_file_names_and_labels[:int(0.7 * len(valid_file_names_and_labels))]
+    test_files = valid_file_names_and_labels[
+                 int(0.7 * len(valid_file_names_and_labels)):int(0.85 * len(valid_file_names_and_labels))]
+    validation_files = valid_file_names_and_labels[int(0.85 * len(valid_file_names_and_labels)):]
     return training_files, test_files, validation_files
 
 
@@ -53,11 +59,11 @@ def distinguish_seven_most_common_abnormalities(path):
     seven_most_common = sorted([key for key in label_dic.keys()], key=lambda x: len(label_dic[x]), reverse=True)[:7]
     for key in seven_most_common:
         seven_most_common_files[key] = label_dic[key]
-    training_files, test_files, validation_files = make_test_training_validation_file_sets(seven_most_common_files)
+    training_files, test_files, validation_files = make_test_training_validation_file_sets_with_labels(
+        seven_most_common_files)
 
     return seven_most_common_files, training_files, test_files, validation_files
 
 
-# seven_most_common_files, training_files, test_files, validation_files = distinguish_seven_most_common_abnormalities(
-#     "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data")
-
+seven_most_common_files, training_files, test_files, validation_files = distinguish_seven_most_common_abnormalities(
+    "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data")
