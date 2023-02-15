@@ -78,15 +78,25 @@ def make_test_training_validation_file_sets_with_labels(path, boundary_for_amoun
                 count[key] += 1
 
     valid_file_names_and_labels = [("HR" + key + ".mat", valid_file_dic[key]) for key in valid_file_dic.keys()]
+    # we want to randomize the data before we split it to the sets of files, and we want to check we get a good amount
+    # of data with abnormalities and not just data with healthy heart rate labeling
     random.shuffle(valid_file_names_and_labels)
+    counter_of_normal_scenario = sum(
+        [1 for x in valid_file_names_and_labels[:int(0.7 * len(valid_file_names_and_labels))] if '426783006' in x[1] and (len(x[1]) == 1)])
+    while (counter_of_normal_scenario > (0.4 * count['426783006'])) or (
+            counter_of_normal_scenario < (0.2 * count['426783006'])):
+        random.shuffle(valid_file_names_and_labels)
+        sum(
+            [1 for x in valid_file_names_and_labels[:int(0.7 * len(valid_file_names_and_labels))] if
+             '426783006' in x[1] and (len(x[1]) == 1)])
+
     training_files = valid_file_names_and_labels[:int(0.7 * len(valid_file_names_and_labels))]
     test_files = valid_file_names_and_labels[
                  int(0.7 * len(valid_file_names_and_labels)):int(0.85 * len(valid_file_names_and_labels))]
     validation_files = valid_file_names_and_labels[int(0.85 * len(valid_file_names_and_labels)):]
     return training_files, test_files, validation_files
 
+
 # example on how to run this code
 training_files, test_files, validation_files = make_test_training_validation_file_sets_with_labels(
     "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data", 7500)
-
-
