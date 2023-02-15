@@ -2,7 +2,7 @@ import random
 import os
 
 
-def iterate_files(dir_path):
+def iterate_over_files(dir_path):
     """
     A function to iterate over files in a directory
     """
@@ -19,7 +19,7 @@ def make_dictionary_from_header_files(path):
     Dx as the key and adds the file number as a value for the dictionary, returns this dictionary.
     """
     label_dic = {}
-    for file_path in iterate_files(path):
+    for file_path in iterate_over_files(path):
         if ".hea" in file_path:
             start_word = "HR"
             end_word = ".hea"
@@ -56,7 +56,6 @@ def distinguish_seven_most_common_abnormalities(label_dic):
 
 
 def make_test_training_validation_file_sets_with_labels(path, boundary_for_amount_of_same_label_files):
-    # TODO : NEED TO UPDATE THE NUM OF FILES TO CHECK WE HAVE THE SAME AMOUNT OF FILES WITH DYSFUNCTIONS IN ALL SETS
     """
     This functions takes the dictionary we extracted from the header files and make a training test validation file sets with labels
     we can also put boundary for the amount of files with the same label
@@ -68,11 +67,10 @@ def make_test_training_validation_file_sets_with_labels(path, boundary_for_amoun
     for key, val in seven_most_common_files.items():
         count[key] = 0
         for file in val:
-            if file in valid_file_dic.keys():
-                # putting a boundary for the amount of  files
-                if count[key] >= boundary_for_amount_of_same_label_files:
-                    continue
-                # with the same label
+            if count[key] >= boundary_for_amount_of_same_label_files:  # putting a boundary for the amount of  files
+                # with the same label (for better training data)
+                continue
+            elif file in valid_file_dic.keys():
                 valid_file_dic[file].append(key)
             else:
                 valid_file_dic[file] = []
@@ -87,8 +85,8 @@ def make_test_training_validation_file_sets_with_labels(path, boundary_for_amoun
     validation_files = valid_file_names_and_labels[int(0.85 * len(valid_file_names_and_labels)):]
     return training_files, test_files, validation_files
 
-
+# example on how to run this code
 training_files, test_files, validation_files = make_test_training_validation_file_sets_with_labels(
-    "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data", 20000)
+    "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data", 7500)
 
 
