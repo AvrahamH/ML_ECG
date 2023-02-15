@@ -56,6 +56,7 @@ def distinguish_seven_most_common_abnormalities(label_dic):
 
 
 def make_test_training_validation_file_sets_with_labels(path, boundary_for_amount_of_same_label_files):
+    # TODO : NEED TO UPDATE THE NUM OF FILES TO CHECK WE HAVE THE SAME AMOUNT OF FILES WITH DYSFUNCTIONS IN ALL SETS
     """
     This functions takes the dictionary we extracted from the header files and make a training test validation file sets with labels
     we can also put boundary for the amount of files with the same label
@@ -67,12 +68,15 @@ def make_test_training_validation_file_sets_with_labels(path, boundary_for_amoun
     for key, val in seven_most_common_files.items():
         count[key] = 0
         for file in val:
-            if file in valid_file_dic.keys() or count[
-                key] >= boundary_for_amount_of_same_label_files:  # putting a boundary for the amount of  files
+            if file in valid_file_dic.keys():
+                # putting a boundary for the amount of  files
+                if count[key] >= boundary_for_amount_of_same_label_files:
+                    continue
                 # with the same label
-                continue
+                valid_file_dic[file].append(key)
             else:
-                valid_file_dic[file] = key
+                valid_file_dic[file] = []
+                valid_file_dic[file].append(key)
                 count[key] += 1
 
     valid_file_names_and_labels = [("HR" + key + ".mat", valid_file_dic[key]) for key in valid_file_dic.keys()]
@@ -85,5 +89,6 @@ def make_test_training_validation_file_sets_with_labels(path, boundary_for_amoun
 
 
 training_files, test_files, validation_files = make_test_training_validation_file_sets_with_labels(
-    "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data", 8000)
+    "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data", 20000)
+
 
