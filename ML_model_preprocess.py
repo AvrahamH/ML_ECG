@@ -1,5 +1,6 @@
 import random
 import os
+import wfdb
 
 
 def iterate_over_files(dir_path):
@@ -55,7 +56,14 @@ def distinguish_seven_most_common_abnormalities(label_dic):
     return seven_most_common_files
 
 
-def make_test_training_validation_file_sets_with_labels(path, boundary_for_amount_of_same_label_files):
+def processing_of_the_data(data):
+    """
+    This functions does some manipulation on the data of the ECG signal to make it more suitable for the ML model
+    """
+    pass
+
+
+def make_test_training_validation_data_sets_with_labels(path, boundary_for_amount_of_same_label_files):
     """
     This functions takes the dictionary we extracted from the header files and make a training test validation file sets with labels
     we can also put boundary for the amount of files with the same label
@@ -76,27 +84,34 @@ def make_test_training_validation_file_sets_with_labels(path, boundary_for_amoun
                 valid_file_dic[file] = []
                 valid_file_dic[file].append(key)
                 count[key] += 1
+    # extracting the data from the files with the wfdb library and putting it as a list with the labels of the files
+    valid_data_and_labels = [[wfdb.rdsamp(f"{path}//HR{key}")[0], valid_file_dic[key]] for key in
+                             valid_file_dic.keys()]
+    # TODO : NEED TO DO MANIPULATION ON THE DATA FROM THE MATLAB_FILES BEFORE SENDING IT THE DATA NOW IS 5000X12 matrix
+    data_and_labels = processing_of_the_data(valid_data_and_labels)
 
-    valid_file_names_and_labels = [("HR" + key + ".mat", valid_file_dic[key]) for key in valid_file_dic.keys()]
     # we want to randomize the data before we split it to the sets of files, and we want to check we get a good amount
     # of data with abnormalities and not just data with healthy heart rate labeling
-    random.shuffle(valid_file_names_and_labels)
+    random.shuffle(valid_data_and_labels)
     counter_of_normal_scenario = sum(
-        [1 for x in valid_file_names_and_labels[:int(0.7 * len(valid_file_names_and_labels))] if '426783006' in x[1] and (len(x[1]) == 1)])
+        [1 for x in valid_data_and_labels[:int(0.7 * len(valid_data_and_labels))] if
+         '426783006' in x[1] and (len(x[1]) == 1)])
     while (counter_of_normal_scenario > (0.4 * count['426783006'])) or (
             counter_of_normal_scenario < (0.2 * count['426783006'])):
-        random.shuffle(valid_file_names_and_labels)
+        random.shuffle(valid_data_and_labels)
         sum(
-            [1 for x in valid_file_names_and_labels[:int(0.7 * len(valid_file_names_and_labels))] if
+            [1 for x in valid_data_and_labels[:int(0.7 * len(valid_data_and_labels))] if
              '426783006' in x[1] and (len(x[1]) == 1)])
 
-    training_files = valid_file_names_and_labels[:int(0.7 * len(valid_file_names_and_labels))]
-    test_files = valid_file_names_and_labels[
-                 int(0.7 * len(valid_file_names_and_labels)):int(0.85 * len(valid_file_names_and_labels))]
-    validation_files = valid_file_names_and_labels[int(0.85 * len(valid_file_names_and_labels)):]
-    return training_files, test_files, validation_files
+    training_data = valid_data_and_labels[:int(0.7 * len(valid_data_and_labels))]
+    test_data = valid_data_and_labels[
+                int(0.7 * len(valid_data_and_labels)):int(0.85 * len(valid_data_and_labels))]
+    validation_data = valid_data_and_labels[int(0.85 * len(valid_data_and_labels)):]
+    return training_data, test_data, validation_data
 
 
 # example on how to run this code
-training_files, test_files, validation_files = make_test_training_validation_file_sets_with_labels(
-    "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data", 7500)
+path = "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data"
+training_files, test_files, validation_files = make_test_training_validation_data_sets_with_labels(
+    path, 7500)
+print("1")
