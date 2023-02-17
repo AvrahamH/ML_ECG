@@ -47,6 +47,9 @@ def make_dictionary_from_header_files(path):
 
 
 def plot_histogram_of_abnormalities(dic, title):
+    """
+    This function takes a dictionary object and plots the keys and values as a histogram
+    """
     # Extract keys and values
     abnormalities = list(dic.keys())
     amount_of_files = list(dic.values())
@@ -64,7 +67,8 @@ def plot_histogram_of_abnormalities(dic, title):
 
 def distinguish_seven_most_common_abnormalities(label_dic, histogram_enable=None):
     """
-    This function takes the dictionary of all the headers files and retunes a dictionary with only the 7 most common Dx
+    This function takes the dictionary of all the headers files and retunes a dictionary with only the 7 most common Dx,
+    if enabled, this function can also print the histogram of the amount of files per abnormality
     """
     seven_most_common_files = {}
     seven_most_common = sorted([key for key in label_dic.keys()], key=lambda x: len(label_dic[x]), reverse=True)[:7]
