@@ -2,7 +2,7 @@ import random
 import os
 import wfdb
 import matplotlib.pyplot as plt
-
+import numpy as np
 
 def iterate_over_files(dir_path):
     """
@@ -84,11 +84,19 @@ def distinguish_seven_most_common_abnormalities(label_dic, histogram_enable=None
     return seven_most_common_files
 
 
-def processing_of_the_data(data):
+def pad_matrix_with_zeros(matrix, X = 5000):
+    """Pads a matrix with zeros for size X until it reaches a size of 5000 on 12.
+
+    Args:
+    matrix (numpy.ndarray): Input matrix to pad with zeros.
+    X (int): Size of padding. Default is 12.
+
+    Returns:
+    numpy.ndarray: The padded matrix.
     """
-    This functions does some manipulation on the data of the ECG signal to make it more suitable for the ML model
-    """
-    pass
+    return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
+
+
 
 
 def make_test_training_validation_data_sets_with_labels(path, boundary_for_amount_of_same_label_files):
@@ -113,10 +121,9 @@ def make_test_training_validation_data_sets_with_labels(path, boundary_for_amoun
                 valid_file_dic[file].append(key)
                 count[key] += 1
     # extracting the data from the files with the wfdb library and putting it as a list with the labels of the files
-    valid_data_and_labels = [[wfdb.rdsamp(f"{path}//HR{key}")[0], valid_file_dic[key]] for key in
+    # if the file data isn't 5000 x 12 pad with zeros
+    valid_data_and_labels = [[pad_matrix_with_zeros(wfdb.rdsamp(f"{path}//HR{key}")[0]), valid_file_dic[key]] for key in
                              valid_file_dic.keys()]
-    # TODO : NEED TO DO MANIPULATION ON THE DATA FROM THE MATLAB_FILES BEFORE SENDING IT THE DATA NOW IS 5000X12 matrix
-    data_and_labels = processing_of_the_data(valid_data_and_labels)
 
     # we want to randomize the data before we split it to the sets of files, and we want to check we get a good amount
     # of data with abnormalities and not just data with healthy heart rate labeling
@@ -140,6 +147,6 @@ def make_test_training_validation_data_sets_with_labels(path, boundary_for_amoun
 
 # example on how to run this code
 path = "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data"
-training_files, test_files, validation_files = make_test_training_validation_data_sets_with_labels(
+training_data, test_data, validation_data = make_test_training_validation_data_sets_with_labels(
     path, 7500)
-print("1")
+
