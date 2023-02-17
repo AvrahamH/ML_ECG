@@ -1,6 +1,7 @@
 import random
 import os
 import wfdb
+import matplotlib.pyplot as plt
 
 
 def iterate_over_files(dir_path):
@@ -45,12 +46,35 @@ def make_dictionary_from_header_files(path):
     return label_dic
 
 
-def distinguish_seven_most_common_abnormalities(label_dic):
+def plot_histogram_of_abnormalities(dic, title):
+    # Extract keys and values
+    abnormalities = list(dic.keys())
+    amount_of_files = list(dic.values())
+
+    # Create a histogram
+    plt.bar(abnormalities, amount_of_files)
+
+    # Set the x and y axis labels
+    plt.xlabel("Abnormalities")
+    plt.ylabel("Amount_of_files")
+    plt.title(title)
+    # Show the plot
+    plt.show()
+
+
+def distinguish_seven_most_common_abnormalities(label_dic, histogram_enable=None):
     """
     This function takes the dictionary of all the headers files and retunes a dictionary with only the 7 most common Dx
     """
     seven_most_common_files = {}
     seven_most_common = sorted([key for key in label_dic.keys()], key=lambda x: len(label_dic[x]), reverse=True)[:7]
+    if histogram_enable:
+        histogram_by_abnormalities = {key: len(label_dic[key]) for key in label_dic.keys()}
+        histogram_by_abnormalities_seven_most_common = {key: len(label_dic[key]) for key in seven_most_common}
+        plot_histogram_of_abnormalities(histogram_by_abnormalities, "Amount of files per abnormality")
+        plot_histogram_of_abnormalities(histogram_by_abnormalities_seven_most_common,
+                                        "Amount of files per abnormality - "
+                                        "seven most common")
     for key in seven_most_common:
         seven_most_common_files[key] = label_dic[key]
     return seven_most_common_files
