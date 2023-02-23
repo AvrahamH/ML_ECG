@@ -96,9 +96,6 @@ def pad_matrix_with_zeros(matrix, X = 5000):
     """
     return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
 
-
-
-
 def make_test_training_validation_data_sets_with_labels(path, boundary_for_amount_of_same_label_files):
     """
     This functions takes the dictionary we extracted from the header files and make a training test validation file sets with labels
