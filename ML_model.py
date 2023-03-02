@@ -1,8 +1,9 @@
 import torch
 import wfdb
 import os
+import matplotlib.pyplot as plt
 import numpy as np
-from preprocess import split_data
+from preprocess import split_data, load_files
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, Dataset
@@ -13,7 +14,7 @@ class EcgDataset(Dataset):
         self.data_dir = data_dir
         self.samples = []
         self.labels = []
-        self.label_map = {'426783006': 0, '164865005': 0, '39732003': 0, '164951009': 0, '164873001': 0, '164934002': 0, '164861001': 0}
+        self.label_map = {'426783006': 0, '164865005': 1, '39732003': 2, '164951009': 3, '164873001': 4, '164934002': 5, '164861001': 6}
         self.load_data()
 
     def __len__(self):
@@ -22,22 +23,18 @@ class EcgDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.samples[idx]
         label = self.labels[idx]
-        return torch.from_numpy(sample).float(), torch.from_numpy(label).float()
+        return torch.from_numpy(sample).float(), torch.tensor(label).float()
 
     def load_data(self):
         # Load the ECG signals and labels using the wfdb package
-        for record_name in os.listdir(self.data_dir)[::2]:
-            record_name = f"{self.data_dir}/{record_name[:-4]}"
-            record = wfdb.rdrecord(record_name)
-            ann = wfdb.rdann(record_name, 'hea')
-            signals = record.p_signal
-            labels = np.zeros(len(record.sig_name))
-            for i, label in enumerate(ann.symbol):
-                if label in self.label_map:
-                    labels[self.label_map[label]] = 1
-            self.samples.append(signals)
-            self.labels.append(labels)
+        self.samples, labels = load_files(self.data_dir)
+        self.labels = [[0]*7 for i in labels]
+        for i, sub_labels in enumerate(labels):
+            for label in sub_labels:
+                self.labels[i][self.label_map[label]] = 1
 
+
+device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
 
 # Define the model architecture
 class ECGModel(nn.Module):
@@ -85,13 +82,45 @@ class ECGModel(nn.Module):
         x = self.sigmoid(x)
         x = self.round(x)
         return x
+    
+def train(model, train_loader, criterion, optimizer, device):
+    model.train()
+    running_loss = 0.0
+    train_losses = []
+    for i, (inputs, labels) in enumerate(train_loader):
+        inputs, labels = inputs.to(device), labels.to(device)
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        train_losses.append(loss.item())
+        running_loss += loss.item()
+    return running_loss / len(train_loader), train_losses
 
 
-device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
+def evaluate(model, val_loader, criterion, device):
+    val_losses = []
+    model.eval()
+    with torch.no_grad():
+        correct = 0
+        total = 0
+        running_loss = 0.0
+        for i, (inputs, labels) in enumerate(val_loader):
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            val_losses.append(loss.item())
+            running_loss += loss.item()
+            predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
+            total += labels.size(0) * labels.size(1)
+            correct += (predicted == labels).sum().item()
+        accuracy = 100 * correct / total
+    return running_loss / len(val_loader), accuracy, val_losses
+
 
 if __name__ == "__main__":
     path = "WFDB"
-    
     split_data(path, 7500)
 
     train_path = f"{path}/train"
@@ -99,21 +128,6 @@ if __name__ == "__main__":
     test_path = f"{path}/test"
     print("Number of files in each dataset:\ntrain={}, validation={}, test={}"\
           .format(len(os.listdir(train_path))//2,len(os.listdir(val_path))//2, len(os.listdir(test_path))//2))
-    
-    
-    # x_train = [x[0] for x in training_data]
-    # y_train = [x[1] for x in training_data]
-    # x_val = [x[0] for x in validation_data]
-    # y_val = [x[1] for x in validation_data]
-    # x_test = [x[0] for x in test_data]
-    # y_test = [x[1] for x in test_data]
-    # # Convert the ECG data and labels to PyTorch tensors
-    # x_train = torch.Tensor(x_train)
-    # y_train = torch.Tensor(y_train)
-    # x_val = torch.Tensor(x_val)
-    # y_val = torch.Tensor(y_val)
-    # x_test = torch.Tensor(x_test)
-    # y_test = torch.Tensor(y_test)
 
     # Create PyTorch data loaders for the ECG data
     train_dataset = EcgDataset(train_path)
@@ -121,32 +135,33 @@ if __name__ == "__main__":
     val_dataset = EcgDataset(val_path)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
-    # # Define the loss function and optimizer
-    # model = ECGModel()
-    # criterion = nn.BCEWithLogitsLoss()
-    # optimizer = optim.Adam(model.parameters())
-    # # Train the model on the ECG data
-    # for epoch in range(200):
-    #     running_loss = 0.0
-    #     for i, data in enumerate(train_loader):
-    #         inputs, labels = data
-    #         optimizer.zero_grad()
-    #         outputs = model(inputs)
-    #         loss = criterion(outputs, labels)
-    #         loss.backward()
-    #         optimizer.step()
-    #         running_loss += loss.item()
-    #     print('Epoch %d training loss: %.3f' % (epoch + 1, running_loss / len(train_loader)))
+    # Define the loss function and optimizer
+    model = ECGModel()
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.Adam(model.parameters())
+    num_epochs = 200
+    # Train the model on the ECG data
+    for epoch in range(num_epochs):
+        train_out, train_losses = train(model, train_loader, criterion, optimizer, device)
+        print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
 
-    #     # Evaluate the model on the validation set
-    #     with torch.no_grad():
-    #         correct = 0
-    #         total = 0
-    #         for data in val_loader:
-    #             inputs, labels = data
-    #             outputs = model(inputs)
-    #             predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
-    #             total += labels.size(0) * labels.size(1)
-    #             correct += (predicted == labels).sum().item()
-    #         accuracy = 100 * correct / total
-    #         print('Epoch %d validation accuracy: %.2f%%' % (epoch + 1, accuracy))
+        # Evaluate the model on the validation set
+        val_out, accuracy, val_losses = evaluate(model, val_loader, criterion, device)
+        print('Epoch %d validation accuracy: %.2f%%' % (epoch + 1, accuracy))
+
+    test_dataset = EcgDataset(test_path)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+    plt.plot(np.arange(num_epochs), train_losses, label='Training loss')
+    plt.plot(np.arange(num_epochs), val_losses, label='Validation loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig('loss_plot.png')
+    plt.show()
+
+    # Evaluate the model on the test dataset
+    test_out, test_accuracy, test_loss = evaluate(model, test_loader, criterion, device)
+    print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+
+    torch.save(model.state_dict(), 'ecg_model.pt')  # save the trained model

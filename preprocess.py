@@ -127,33 +127,31 @@ def zero_padding(matrix, X = 5000):
     return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
 
 
-# def split_data_with_labels(path, boundary_for_amount_of_same_label_files):
-#     """
-#     This functions takes the dictionary we extracted from the header files and splits the data to sets with labels
-#     we can also put boundary for the amount of files with the same label
-#     """
-#     label_dic = create_dict_from_header(path)
-#     seven_most_common_files = identify_top_seven_abnormalities(label_dic)
-#     valid_file_dic = {}
-#     count = {}
-#     for key, val in seven_most_common_files.items():
-#         count[key] = 0
-#         for file in val:
-#             if count[key] >= boundary_for_amount_of_same_label_files:  # putting a boundary for the amount of files
-#                 # with the same label (for better training data)
-#                 continue
-#             elif file in valid_file_dic.keys():
-#                 valid_file_dic[file].append(key)
-#             else:
-#                 valid_file_dic[file] = []
-#                 valid_file_dic[file].append(key)
-#                 count[key] += 1
+def load_files(path):
+    """
+    This functions takes the dictionary we extracted from the header files and splits the data to sets with labels
+    we can also put boundary for the amount of files with the same label
+    """
+    label_dic = create_dict_from_header(path)
+    seven_most_common_files = identify_top_seven_abnormalities(label_dic)
+    valid_file_dic = {}
+    count = {}
+    for key, val in seven_most_common_files.items():
+        count[key] = 0
+        for file in val:
+            if file in valid_file_dic.keys():
+                valid_file_dic[file].append(key)
+            else:
+                valid_file_dic[file] = []
+                valid_file_dic[file].append(key)
+                count[key] += 1
     
-#     # extracting the data from the files with the wfdb library and putting it as a list with the labels of the files
-#     # if the file data isn't 5000 x 12 pad with zeros
-#     valid_data_and_labels = [[zero_padding(wfdb.rdsamp(f"{path}//HR{key}")[0]), valid_file_dic[key]] for key in
-#                              valid_file_dic.keys()]
+    # extracting the data from the files with the wfdb library and putting it as a list with the labels of the files
+    # if the file data isn't 5000 x 12 pad with zeros
+    data = [zero_padding(wfdb.rdsamp(f"{path}//HR{key}")[0]) for key in valid_file_dic.keys()]
+    labels = [valid_file_dic[key] for key in valid_file_dic.keys()]
 
+    return data, labels
 #     # we want to randomize the data before we split it to the sets of files, and we want to check we get a good amount
 #     # of data with abnormalities and not just data with healthy heart rate labeling
 #     random.shuffle(valid_data_and_labels)
