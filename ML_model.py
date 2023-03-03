@@ -23,7 +23,8 @@ class EcgDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.samples[idx]
         label = self.labels[idx]
-        return torch.from_numpy(sample).float(), torch.tensor(label).float()
+        # the samples need to be permuted because the conv layer is taking the first input as the amount of channels
+        return torch.from_numpy(sample).float().permute(1,0), torch.tensor(label).float()
 
     def load_data(self):
         # Load the ECG signals and labels using the wfdb package
@@ -75,6 +76,7 @@ class ECGModel(nn.Module):
         x = nn.functional.relu(x)
         x = self.maxpool5(x)
         x = self.flatten(x)
+        # THE CODE FALLS HERE WITH THIS ERROR 'mps.matmul' op contracting dimensions differ 159744 & 1024 NEED TO FIX IT
         x = self.fc1(x)
         x = self.dropout1(x)
         x = nn.functional.relu(x)
@@ -85,6 +87,7 @@ class ECGModel(nn.Module):
     
 def train(model, train_loader, criterion, optimizer, device):
     model.train()
+    model.to(device)
     running_loss = 0.0
     train_losses = []
     for i, (inputs, labels) in enumerate(train_loader):
@@ -132,6 +135,7 @@ if __name__ == "__main__":
     # Create PyTorch data loaders for the ECG data
     train_dataset = EcgDataset(train_path)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+
     val_dataset = EcgDataset(val_path)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 

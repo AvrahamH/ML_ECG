@@ -92,7 +92,7 @@ def split_data(path, max_count):
         os.mkdir(f'{path}/test')
 
     label_dic = create_dict_from_header(path)
-    seven_most_common_files = identify_top_seven_abnormalities(label_dic)
+    seven_most_common_files = identify_top_seven_abnormalities(label_dic,histogram_enable=True)
 
     # iterate over the abnormalities and split into folders (least common disease first)
     for key in sorted(seven_most_common_files, key = lambda key: len(seven_most_common_files[key])):
@@ -152,26 +152,3 @@ def load_files(path):
     labels = [valid_file_dic[key] for key in valid_file_dic.keys()]
 
     return data, labels
-#     # we want to randomize the data before we split it to the sets of files, and we want to check we get a good amount
-#     # of data with abnormalities and not just data with healthy heart rate labeling
-#     random.shuffle(valid_data_and_labels)
-#     nsr_count = sum(
-#         [1 for x in valid_data_and_labels[:int(0.7 * len(valid_data_and_labels))] if
-#          '426783006' in x[1] and (len(x[1]) == 1)])
-#     while (nsr_count > (0.4 * count['426783006'])) or (nsr_count < (0.2 * count['426783006'])):
-#         random.shuffle(valid_data_and_labels)
-#         sum(
-#             [1 for x in valid_data_and_labels[:int(0.7 * len(valid_data_and_labels))] if
-#              '426783006' in x[1] and (len(x[1]) == 1)])
-
-#     training_data = valid_data_and_labels[:int(0.7 * len(valid_data_and_labels))]
-#     test_data = valid_data_and_labels[
-#                 int(0.7 * len(valid_data_and_labels)):int(0.85 * len(valid_data_and_labels))]
-#     validation_data = valid_data_and_labels[int(0.85 * len(valid_data_and_labels)):]
-#     return training_data, test_data, validation_data
-
-
-# example on how to run this code
-# path = "//Users//avrahamhrinevitzky//Desktop//שנה ד //סמסטר א//הולכה חשמלית בתאים//ML_model_project/data"
-# training_data, test_data, validation_data = split_data_with_labels(path, 7500)
-
