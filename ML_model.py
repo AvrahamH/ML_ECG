@@ -7,6 +7,7 @@ from preprocess import split_data, load_files
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, Dataset
+# from sklearn.metrics import confusion_matrix, plot_confusion_matrix
 
 # Define the ECG dataset
 class EcgDataset(Dataset):
@@ -42,85 +43,116 @@ class ECGModel(nn.Module):
     def __init__(self):
         super(ECGModel, self).__init__()
         self.conv1 = nn.Conv1d(in_channels=12, out_channels=64, kernel_size=5, padding=2)
+        self.bn1 = nn.BatchNorm1d(64)
         self.maxpool1 = nn.MaxPool1d(kernel_size=2)
         self.conv2 = nn.Conv1d(in_channels=64, out_channels=128, kernel_size=5, padding=2)
+        self.bn2 = nn.BatchNorm1d(128)
         self.maxpool2 = nn.MaxPool1d(kernel_size=2)
         self.conv3 = nn.Conv1d(in_channels=128, out_channels=256, kernel_size=5, padding=2)
+        self.bn3 = nn.BatchNorm1d(256)
         self.maxpool3 = nn.MaxPool1d(kernel_size=2)
         self.conv4 = nn.Conv1d(in_channels=256, out_channels=512, kernel_size=5, padding=2)
+        self.bn4 = nn.BatchNorm1d(512)
         self.maxpool4 = nn.MaxPool1d(kernel_size=2)
         self.conv5 = nn.Conv1d(in_channels=512, out_channels=1024, kernel_size=5, padding=2)
+        self.bn5 = nn.BatchNorm1d(1024)
         self.maxpool5 = nn.MaxPool1d(kernel_size=2)
+        self.conv6 = nn.Conv1d(in_channels=1024, out_channels=2048, kernel_size=5, padding=2)
+        self.bn6 = nn.BatchNorm1d(2048)
+        self.maxpool6 = nn.MaxPool1d(kernel_size=4)
+        self.conv7 = nn.Conv1d(in_channels=2048, out_channels=4096, kernel_size=5, padding=2)
+        self.bn7 = nn.BatchNorm1d(4096)
+        self.maxpool7 = nn.MaxPool1d(kernel_size=4)
         self.flatten = nn.Flatten()
         self.dropout1 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(1024, 512)
+        self.fc1 = nn.Linear(36864, 1024)
+        self.bn8 = nn.BatchNorm1d(1024)
         self.dropout2 = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(512, 7)
+        self.fc2 = nn.Linear(1024, 512)
+        self.bn9 = nn.BatchNorm1d(512)
+        self.dropout3 = nn.Dropout(0.5)
+        self.fc3 = nn.Linear(512, 7)
         self.sigmoid = nn.Sigmoid()
         self.round = nn.Hardtanh(min_val=0, max_val=1)
 
     def forward(self, x):
         x = self.conv1(x)
+        x = self.bn1(x)
         x = nn.functional.relu(x)
         x = self.maxpool1(x)
         x = self.conv2(x)
+        x = self.bn2(x)
         x = nn.functional.relu(x)
         x = self.maxpool2(x)
         x = self.conv3(x)
+        x = self.bn3(x)
         x = nn.functional.relu(x)
         x = self.maxpool3(x)
         x = self.conv4(x)
+        x = self.bn4(x)
         x = nn.functional.relu(x)
         x = self.maxpool4(x)
         x = self.conv5(x)
+        x = self.bn5(x)
         x = nn.functional.relu(x)
         x = self.maxpool5(x)
+        x = self.conv6(x)
+        x = self.bn6(x)
+        x = nn.functional.relu(x)
+        x = self.maxpool6(x)
+        x = self.conv7(x)
+        x = self.bn7(x)
+        x = nn.functional.relu(x)
+        x = self.maxpool7(x)
         x = self.flatten(x)
-        # THE CODE FALLS HERE WITH THIS ERROR 'mps.matmul' op contracting dimensions differ 159744 & 1024 NEED TO FIX IT
         x = self.fc1(x)
+        x = self.bn8(x)
         x = self.dropout1(x)
         x = nn.functional.relu(x)
         x = self.fc2(x)
+        x = self.bn9(x)
+        x = self.dropout2(x)
+        x = nn.functional.relu(x)
+        x = self.fc3(x)
+        x = self.dropout3(x)
         x = self.sigmoid(x)
         x = self.round(x)
         return x
+
     
 def train(model, train_loader, criterion, optimizer, device):
     model.train()
     model.to(device)
     running_loss = 0.0
-    train_losses = []
-    for i, (inputs, labels) in enumerate(train_loader):
+    for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = model(inputs)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        train_losses.append(loss.item())
         running_loss += loss.item()
-    return running_loss / len(train_loader), train_losses
+    return running_loss / len(train_loader)
 
 
 def evaluate(model, val_loader, criterion, device):
-    val_losses = []
     model.eval()
     with torch.no_grad():
         correct = 0
         total = 0
         running_loss = 0.0
-        for i, (inputs, labels) in enumerate(val_loader):
+        for inputs, labels in val_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
-            val_losses.append(loss.item())
             running_loss += loss.item()
             predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
             total += labels.size(0) * labels.size(1)
             correct += (predicted == labels).sum().item()
         accuracy = 100 * correct / total
-    return running_loss / len(val_loader), accuracy, val_losses
+    return running_loss / len(val_loader), accuracy
 
+classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 
 if __name__ == "__main__":
     path = "WFDB"
@@ -139,22 +171,26 @@ if __name__ == "__main__":
     val_dataset = EcgDataset(val_path)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
+    test_dataset = EcgDataset(test_path)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
     # Define the loss function and optimizer
-    model = ECGModel()
+    model = ECGModel().to(device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
-    num_epochs = 200
+    num_epochs = 50
+    train_losses = []
+    val_losses = []
     # Train the model on the ECG data
     for epoch in range(num_epochs):
-        train_out, train_losses = train(model, train_loader, criterion, optimizer, device)
+        train_out = train(model, train_loader, criterion, optimizer, device)
+        train_losses.append(train_out)
         print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
 
         # Evaluate the model on the validation set
-        val_out, accuracy, val_losses = evaluate(model, val_loader, criterion, device)
+        val_out, accuracy = evaluate(model, val_loader, criterion, device)
+        val_losses.append(val_out)
         print('Epoch %d validation accuracy: %.2f%%' % (epoch + 1, accuracy))
-
-    test_dataset = EcgDataset(test_path)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     plt.plot(np.arange(num_epochs), train_losses, label='Training loss')
     plt.plot(np.arange(num_epochs), val_losses, label='Validation loss')
@@ -167,5 +203,10 @@ if __name__ == "__main__":
     # Evaluate the model on the test dataset
     test_out, test_accuracy, test_loss = evaluate(model, test_loader, criterion, device)
     print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+
+    # disp = plot_confusion_matrix(cm, classes=classes, normalize=True,
+    #                             title='Normalized confusion matrix')
+    # disp.ax_.set_title('Normalized confusion matrix')
+    # plt.show()
 
     torch.save(model.state_dict(), 'ecg_model.pt')  # save the trained model
