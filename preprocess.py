@@ -53,15 +53,16 @@ def plot_histogram_of_abnormalities(dic, title):
     # Extract keys and values
     abnormalities = list(dic.keys())
     amount_of_files = list(dic.values())
-
+    plt.figure(figsize = (15,7))
     # Create a histogram
     plt.bar(abnormalities, amount_of_files)
-
+    plt.xticks(rotation=75, fontsize='xx-small')
     # Set the x and y axis labels
     plt.xlabel("Abnormalities")
-    plt.ylabel("Amount_of_files")
+    plt.ylabel("Amount of files")
     plt.title(title)
-    # Show the plot
+    # Show the plot and save the plot
+    plt.savefig(f'{title}.png')
     plt.show()
 
 

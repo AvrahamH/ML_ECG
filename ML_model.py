@@ -122,7 +122,9 @@ class ECGModel(nn.Module):
     
 def train(model, train_loader, criterion, optimizer, device):
     model.train()
+    correct = 0
     running_loss = 0.0
+    total = 0
     for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
@@ -131,7 +133,11 @@ def train(model, train_loader, criterion, optimizer, device):
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-    return running_loss / len(train_loader)
+        predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
+        total += labels.size(0) * labels.size(1)
+        correct += (predicted == labels).sum().item()
+    accuracy = 100 * correct / total
+    return running_loss / len(train_loader), accuracy
 
 
 def evaluate(model, val_loader, criterion, device):
@@ -182,13 +188,15 @@ if __name__ == "__main__":
     val_losses = []
     # Train the model on the ECG data
     for epoch in range(num_epochs):
-        train_out = train(model, train_loader, criterion, optimizer, device)
+        train_out,train_accuracy= train(model, train_loader, criterion, optimizer, device)
         train_losses.append(train_out)
         print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
+        print('Epoch %d training accuracy: %.2f%%' % (epoch + 1, train_accuracy))
 
         # Evaluate the model on the validation set
         val_out, accuracy = evaluate(model, val_loader, criterion, device)
         val_losses.append(val_out)
+
         print('Epoch %d validation accuracy: %.2f%%' % (epoch + 1, accuracy))
 
     plt.plot(np.arange(num_epochs), train_losses, label='Training loss')
@@ -200,7 +208,7 @@ if __name__ == "__main__":
     plt.show()
 
     # Evaluate the model on the test dataset
-    test_out, test_accuracy, test_loss = evaluate(model, test_loader, criterion, device)
+    test_out, test_accuracy = evaluate(model, test_loader, criterion, device)
     print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
 
     # disp = plot_confusion_matrix(cm, classes=classes, normalize=True,
