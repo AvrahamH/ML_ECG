@@ -73,7 +73,6 @@ class ECGModel(nn.Module):
         self.dropout3 = nn.Dropout(0.5)
         self.fc3 = nn.Linear(512, 7)
         self.sigmoid = nn.Sigmoid()
-        self.round = nn.Hardtanh(min_val=0, max_val=1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -116,7 +115,7 @@ class ECGModel(nn.Module):
         x = self.fc3(x)
         x = self.dropout3(x)
         x = self.sigmoid(x)
-        x = self.round(x)
+        x = x.round()
         return x
 
     
@@ -180,7 +179,9 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     # Define the loss function and optimizer
-    model = ECGModel().to(device)
+    model = ECGModel()
+    # model = nn.DataParallel(model)
+    model.to(device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
     num_epochs = 50
