@@ -1,7 +1,7 @@
 import torch
 import wfdb
 import os
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+# from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay ## NEED FOR CONFUSION MATRIX
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,6 +11,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from torch.optim.lr_scheduler import StepLR
 import argparse
+
+
 # import scipy.signal as signal
 # from torch.nn.parallel import DistributedDataParallel
 # from sklearn.metrics import confusion_matrix, plot_confusion_matrix
@@ -21,7 +23,8 @@ class EcgDataset(Dataset):
         self.data_dir = data_dir
         self.samples = []
         self.labels = []
-        self.label_map = {'426783006': 0, '164865005': 1, '39732003': 2, '164951009': 3, '164873001': 4, '164934002': 5, '164861001': 6}
+        self.label_map = {'426783006': 0, '164865005': 1, '39732003': 2, '164951009': 3, '164873001': 4, '164934002': 5,
+                          '164861001': 6}
         self.load_data()
 
     def __len__(self):
@@ -40,13 +43,14 @@ class EcgDataset(Dataset):
     def load_data(self):
         # Load the ECG signals and labels using the wfdb package
         self.samples, labels = load_files(self.data_dir)
-        self.labels = [[0]*7 for i in labels]
+        self.labels = [[0] * 7 for i in labels]
         for i, sub_labels in enumerate(labels):
             for label in sub_labels:
                 self.labels[i][self.label_map[label]] = 1
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
+
 
 # Define the model architecture
 class ECGModel(nn.Module):
@@ -126,7 +130,7 @@ class ECGModel(nn.Module):
         # x = x.round()
         return x
 
-    
+
 def train(model, train_loader, criterion, optimizer, device):
     model.train()
     correct = 0
@@ -153,7 +157,7 @@ def evaluate(model, val_loader, criterion, device):
         correct = 0
         total = 0
         running_loss = 0.0
-        predict_vec = [] # for confusion_mat
+        predict_vec = []  # for confusion_mat
         for inputs, labels in val_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
@@ -164,19 +168,43 @@ def evaluate(model, val_loader, criterion, device):
             total += labels.size(0) * labels.size(1)
             correct += (predicted == labels).sum().item()
         accuracy = 100 * correct / total
-    return running_loss / len(val_loader), accuracy ,predict_vec
+    return running_loss / len(val_loader), accuracy, predict_vec
+
 
 classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i','--input', type=str, default='WFDB', help='Directory for data dir')
-    parser.add_argument('-i','--input', type=str, default='WFDB', help='Directory for data dir')
+    parser.add_argument('-i', '--input', type=str, default='WFDB', help='Directory for data dir')
+    parser.add_argument('-i', '--input', type=str, default='WFDB', help='Directory for data dir')
     parser.add_argument('--phase', type=str, default='train', help='Phase: train or test')
     parser.add_argument('--epochs', type=int, default=40, help='Training epochs')
     parser.add_argument('--resume', default=False, action='store_true', help='Resume')
     parser.add_argument('--model-path', type=str, default='', help='Path to saved model')
     return parser.parse_args()
+
+# AFTER TESTING
+# def plot_confusion_matrix(test_label_array, predict_vec):
+#     f, axes = plt.subplots(2, 4, figsize=(25, 15))
+#     f.delaxes(axes[1, 3])
+#     axes = axes.ravel()
+#     for i in range(7):
+#         disp = ConfusionMatrixDisplay(confusion_matrix(test_label_array[i, :],
+#                                                        predict_vec[i, :]),
+#                                       display_labels=[0, i])
+#         disp.plot(ax=axes[i], values_format='.4g')
+#         disp.ax_.set_title(f'{classes[i]}')
+#         if i < 10:
+#             disp.ax_.set_xlabel('')
+#         if i % 5 != 0:
+#             disp.ax_.set_ylabel('')
+#         disp.im_.colorbar.remove()
+#
+#     plt.subplots_adjust(wspace=0.10, hspace=0.1)
+#     f.colorbar(disp.im_, ax=axes)
+#     plt.show()
+#     plt.savefig(f'confusion_matrix_{num_epochs}.png')
 
 
 if __name__ == "__main__":
@@ -186,8 +214,8 @@ if __name__ == "__main__":
     train_path = f"{path}/train"
     val_path = f"{path}/validation"
     test_path = f"{path}/test"
-    print("Number of files in each dataset:\ntrain={}, validation={}, test={}"\
-          .format(len(os.listdir(train_path))//2,len(os.listdir(val_path))//2, len(os.listdir(test_path))//2))
+    print("Number of files in each dataset:\ntrain={}, validation={}, test={}" \
+          .format(len(os.listdir(train_path)) // 2, len(os.listdir(val_path)) // 2, len(os.listdir(test_path)) // 2))
 
     # Create PyTorch data loaders for the ECG data
     train_dataset = EcgDataset(train_path)
@@ -206,12 +234,12 @@ if __name__ == "__main__":
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.05)
     scheduler = StepLR(optimizer, step_size=10, gamma=0.2)
-    num_epochs = 1
+    num_epochs = 250
     train_losses = []
     val_losses = []
     # Train the model on the ECG data
     for epoch in range(num_epochs):
-        train_out,train_accuracy, _ = train(model, train_loader, criterion, optimizer, device)
+        train_out, train_accuracy = train(model, train_loader, criterion, optimizer, device)
         train_losses.append(train_out)
         # print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
         # print('Epoch %d training accuracy: %.2f%%' % (epoch + 1, train_accuracy))
@@ -220,9 +248,11 @@ if __name__ == "__main__":
         val_out, accuracy, _ = evaluate(model, val_loader, criterion, device)
         val_losses.append(val_out)
         scheduler.step()
-
-        print('Epoch {}: training loss = {:.3f}, validation loss = {:.3f}, validation accuracy = {:.3f}'.format(epoch + 1, train_out, val_out, accuracy))
-        # print('Epoch %d validation accuracy: %.2f%%' % (epoch + 1, accuracy))
+        print(
+            'Epoch {}: training loss = {:.3f}, validation loss = {:.3f}, validation accuracy = {:.3f}'.format(epoch + 1,
+                                                                                                              train_out,
+                                                                                                              val_out,
+                                                                                                              accuracy))
 
     torch.save(model.state_dict(), 'ecg_model.pt')  # save the trained model
 
@@ -235,28 +265,10 @@ if __name__ == "__main__":
     # plt.show()
 
     # Evaluate the model on the test dataset
-    test_out, test_accuracy , predict_vec = evaluate(model, test_loader, criterion, device)
+    test_out, test_accuracy, predict_vec = evaluate(model, test_loader, criterion, device)
     predict_vec = np.array(predict_vec)
     print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
-    f, axes = plt.subplots(2, 4, figsize=(25, 15))
-    f.delaxes(axes[1, 3])
-    axes = axes.ravel()
-    for i in range(7):
-        disp = ConfusionMatrixDisplay(confusion_matrix(test_label_array[i,:],
-                                                       predict_vec[i,:]),
-                                      display_labels=[0, i])
-        disp.plot(ax=axes[i], values_format='.4g')
-        disp.ax_.set_title(f'{classes[i]}')
-        if i < 10:
-            disp.ax_.set_xlabel('')
-        if i % 5 != 0:
-            disp.ax_.set_ylabel('')
-        disp.im_.colorbar.remove()
-
-    plt.subplots_adjust(wspace=0.10, hspace=0.1)
-    f.colorbar(disp.im_, ax=axes)
-    plt.show()
-    plt.savefig(f'confusion_matrix_{num_epochs}.png')
+    # plot_confusion_matrix(test_label_array,predict_vec)
     # disp = plot_confusion_matrix(cm, classes=classes, normalize=True,
     #                             title='Normalized confusion matrix')
     # disp.ax_.set_title('Normalized confusion matrix')
