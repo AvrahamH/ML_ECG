@@ -6,7 +6,11 @@ import numpy as np
 from preprocess import split_data, load_files
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset, Dataset
+from torch.utils.data import DataLoader, Dataset
+from torch.optim.lr_scheduler import StepLR
+import argparse
+# import scipy.signal as signal
+# from torch.nn.parallel import DistributedDataParallel
 # from sklearn.metrics import confusion_matrix, plot_confusion_matrix
 
 # Define the ECG dataset
@@ -24,8 +28,12 @@ class EcgDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.samples[idx]
         label = self.labels[idx]
+        sample = sample.transpose()
+
+        # b, a = signal.butter(5,[0.5,40],'bandpass',fs=500)
+        # sample = [signal.lfilter(b, a, sample[i]) for i in range(len(sample))]
         # the samples need to be permuted because the conv layer is taking the first input as the amount of channels
-        return torch.from_numpy(sample).float().permute(1,0), torch.tensor(label).float()
+        return torch.from_numpy(np.array(sample)).float(), torch.tensor(label).float()
 
     def load_data(self):
         # Load the ECG signals and labels using the wfdb package
@@ -72,7 +80,6 @@ class ECGModel(nn.Module):
         self.bn9 = nn.BatchNorm1d(512)
         self.dropout3 = nn.Dropout(0.5)
         self.fc3 = nn.Linear(512, 7)
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.conv1(x)
@@ -114,8 +121,7 @@ class ECGModel(nn.Module):
         x = nn.functional.relu(x)
         x = self.fc3(x)
         x = self.dropout3(x)
-        x = self.sigmoid(x)
-        x = x.round()
+        # x = x.round()
         return x
 
     
@@ -158,6 +164,17 @@ def evaluate(model, val_loader, criterion, device):
 
 classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i','--input', type=str, default='WFDB', help='Directory for data dir')
+    parser.add_argument('-i','--input', type=str, default='WFDB', help='Directory for data dir')
+    parser.add_argument('--phase', type=str, default='train', help='Phase: train or test')
+    parser.add_argument('--epochs', type=int, default=40, help='Training epochs')
+    parser.add_argument('--resume', default=False, action='store_true', help='Resume')
+    parser.add_argument('--model-path', type=str, default='', help='Path to saved model')
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     path = "WFDB"
     split_data(path, 7500)
@@ -170,43 +187,48 @@ if __name__ == "__main__":
 
     # Create PyTorch data loaders for the ECG data
     train_dataset = EcgDataset(train_path)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=32, num_workers=4, shuffle=True)
 
     val_dataset = EcgDataset(val_path)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=32, num_workers=4, shuffle=False)
 
     test_dataset = EcgDataset(test_path)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=64, num_workers=4, shuffle=False)
 
     # Define the loss function and optimizer
     model = ECGModel()
-    # model = nn.DataParallel(model)
+    # model = DistributedDataParallel(model)
     model.to(device)
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters())
-    num_epochs = 50
+    optimizer = optim.Adam(model.parameters(), lr=0.05)
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.2)
+    num_epochs = 30
     train_losses = []
     val_losses = []
     # Train the model on the ECG data
     for epoch in range(num_epochs):
         train_out,train_accuracy= train(model, train_loader, criterion, optimizer, device)
         train_losses.append(train_out)
-        print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
-        print('Epoch %d training accuracy: %.2f%%' % (epoch + 1, train_accuracy))
+        # print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
+        # print('Epoch %d training accuracy: %.2f%%' % (epoch + 1, train_accuracy))
 
         # Evaluate the model on the validation set
         val_out, accuracy = evaluate(model, val_loader, criterion, device)
         val_losses.append(val_out)
+        scheduler.step()
 
-        print('Epoch %d validation accuracy: %.2f%%' % (epoch + 1, accuracy))
+        print('Epoch {}: training loss = {:.3f}, validation loss = {:.3f}, validation accuracy = {:.3f}'.format(epoch + 1, train_out, val_out, accuracy))
+        # print('Epoch %d validation accuracy: %.2f%%' % (epoch + 1, accuracy))
+
+    torch.save(model.state_dict(), 'ecg_model.pt')  # save the trained model
 
     plt.plot(np.arange(num_epochs), train_losses, label='Training loss')
     plt.plot(np.arange(num_epochs), val_losses, label='Validation loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig('loss_plot.png')
-    plt.show()
+    plt.savefig(f'loss_plot_{num_epochs}.png')
+    # plt.show()
 
     # Evaluate the model on the test dataset
     test_out, test_accuracy = evaluate(model, test_loader, criterion, device)
@@ -217,4 +239,4 @@ if __name__ == "__main__":
     # disp.ax_.set_title('Normalized confusion matrix')
     # plt.show()
 
-    torch.save(model.state_dict(), 'ecg_model.pt')  # save the trained model
+    torch.save(model.state_dict(), f'ecg_model_{num_epochs}.pt')  # save the trained model
