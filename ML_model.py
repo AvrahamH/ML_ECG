@@ -1,6 +1,8 @@
 import torch
 import wfdb
 import os
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import numpy as np
 from preprocess import split_data, load_files
@@ -151,16 +153,18 @@ def evaluate(model, val_loader, criterion, device):
         correct = 0
         total = 0
         running_loss = 0.0
+        predict_vec = [] # for confusion_mat
         for inputs, labels in val_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             running_loss += loss.item()
             predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
+            predict_vec.append([predict_vec])
             total += labels.size(0) * labels.size(1)
             correct += (predicted == labels).sum().item()
         accuracy = 100 * correct / total
-    return running_loss / len(val_loader), accuracy
+    return running_loss / len(val_loader), accuracy ,predict_vec
 
 classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 
@@ -194,7 +198,7 @@ if __name__ == "__main__":
 
     test_dataset = EcgDataset(test_path)
     test_loader = DataLoader(test_dataset, batch_size=64, num_workers=4, shuffle=False)
-
+    test_label_array = np.array(test_loader.dataset.labels)
     # Define the loss function and optimizer
     model = ECGModel()
     # model = DistributedDataParallel(model)
@@ -202,18 +206,18 @@ if __name__ == "__main__":
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.05)
     scheduler = StepLR(optimizer, step_size=10, gamma=0.2)
-    num_epochs = 30
+    num_epochs = 1
     train_losses = []
     val_losses = []
     # Train the model on the ECG data
     for epoch in range(num_epochs):
-        train_out,train_accuracy= train(model, train_loader, criterion, optimizer, device)
+        train_out,train_accuracy, _ = train(model, train_loader, criterion, optimizer, device)
         train_losses.append(train_out)
         # print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
         # print('Epoch %d training accuracy: %.2f%%' % (epoch + 1, train_accuracy))
 
         # Evaluate the model on the validation set
-        val_out, accuracy = evaluate(model, val_loader, criterion, device)
+        val_out, accuracy, _ = evaluate(model, val_loader, criterion, device)
         val_losses.append(val_out)
         scheduler.step()
 
@@ -231,9 +235,28 @@ if __name__ == "__main__":
     # plt.show()
 
     # Evaluate the model on the test dataset
-    test_out, test_accuracy = evaluate(model, test_loader, criterion, device)
+    test_out, test_accuracy , predict_vec = evaluate(model, test_loader, criterion, device)
+    predict_vec = np.array(predict_vec)
     print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+    f, axes = plt.subplots(2, 4, figsize=(25, 15))
+    f.delaxes(axes[1, 3])
+    axes = axes.ravel()
+    for i in range(7):
+        disp = ConfusionMatrixDisplay(confusion_matrix(test_label_array[i,:],
+                                                       predict_vec[i,:]),
+                                      display_labels=[0, i])
+        disp.plot(ax=axes[i], values_format='.4g')
+        disp.ax_.set_title(f'{classes[i]}')
+        if i < 10:
+            disp.ax_.set_xlabel('')
+        if i % 5 != 0:
+            disp.ax_.set_ylabel('')
+        disp.im_.colorbar.remove()
 
+    plt.subplots_adjust(wspace=0.10, hspace=0.1)
+    f.colorbar(disp.im_, ax=axes)
+    plt.show()
+    plt.savefig(f'confusion_matrix_{num_epochs}.png')
     # disp = plot_confusion_matrix(cm, classes=classes, normalize=True,
     #                             title='Normalized confusion matrix')
     # disp.ax_.set_title('Normalized confusion matrix')
