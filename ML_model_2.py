@@ -82,7 +82,7 @@ class ECGModel(nn.Module):
         self.bn9 = nn.BatchNorm1d(512)
         self.dropout3 = nn.Dropout(0.5)
         self.fc3 = nn.Linear(512, 7)
-
+        self.sigmoid = nn.Sigmoid()
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -123,9 +123,6 @@ class ECGModel(nn.Module):
         x = nn.functional.relu(x)
         x = self.fc3(x)
         x = self.dropout3(x)
-        x_min = torch.min(x)
-        x_max = torch.max(x)
-        x = (x - x_min) / (x_max - x_min)
         return x
 
     
@@ -142,6 +139,7 @@ def train(model, train_loader, criterion, optimizer, device):
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
+        outputs = model.sigmoid(outputs)
         predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
         total += labels.size(0) * labels.size(1)
         correct += (predicted == labels).sum().item()
@@ -160,6 +158,7 @@ def evaluate(model, val_loader, criterion, device):
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             running_loss += loss.item()
+            outputs = model.sigmoid(outputs)
             predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
             total += labels.size(0) * labels.size(1)
             correct += (predicted == labels).sum().item()
