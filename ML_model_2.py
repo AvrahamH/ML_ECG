@@ -162,7 +162,12 @@ def evaluate(model, val_loader, criterion, device,mode = 'val'):
             outputs = model.sigmoid(outputs)
             predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
             if mode == 'test':
-                predict_vec.append([predict_vec])
+                predicted = predicted.cpu()
+                if predict_vec == []:
+                    predict_vec = predicted.numpy()
+                else:
+                    predict_vec = np.vstack((predict_vec,predicted.numpy()))
+            predicted = predicted.to(device)
             total += labels.size(0) * labels.size(1)
             correct += (predicted == labels).sum().item()
         accuracy = 100 * correct / total
