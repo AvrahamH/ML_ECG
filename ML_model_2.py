@@ -147,12 +147,13 @@ def train(model, train_loader, criterion, optimizer, device):
     return running_loss / len(train_loader), accuracy
 
 
-def evaluate(model, val_loader, criterion, device):
+def evaluate(model, val_loader, criterion, device,mode = 'val'):
     model.eval()
     with torch.no_grad():
         correct = 0
         total = 0
         running_loss = 0.0
+        predict_vec = []  # for confusion_mat
         for inputs, labels in val_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
@@ -160,10 +161,12 @@ def evaluate(model, val_loader, criterion, device):
             running_loss += loss.item()
             outputs = model.sigmoid(outputs)
             predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
+            if mode == 'test':
+                predict_vec.append([predict_vec])
             total += labels.size(0) * labels.size(1)
             correct += (predicted == labels).sum().item()
         accuracy = 100 * correct / total
-    return running_loss / len(val_loader), accuracy
+    return running_loss / len(val_loader), accuracy , predict_vec
 
 classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 
@@ -216,7 +219,7 @@ if __name__ == "__main__":
             # print('Epoch %d training accuracy: %.2f%%' % (epoch + 1, train_accuracy))
 
             # Evaluate the model on the validation set
-            val_out, accuracy = evaluate(model, val_loader, criterion, device)
+            val_out, accuracy, __ = evaluate(model, val_loader, criterion, device)
             val_losses.append(val_out)
             scheduler.step()
 
@@ -229,7 +232,7 @@ if __name__ == "__main__":
     torch.save(model.state_dict(), model_name)
 
     # Evaluate the model on the test dataset
-    test_out, test_accuracy = evaluate(model, test_loader, criterion, device)
+    test_out, test_accuracy,predict = evaluate(model, test_loader, criterion, device)
     print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
 
     # Plot and save the loss curve

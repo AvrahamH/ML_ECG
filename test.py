@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from torch.optim.lr_scheduler import StepLR
 import argparse
-import ML_model as ml
+import ML_model_2 as ml
 
 device = torch.device('cpu')
 
@@ -49,7 +49,7 @@ def run_test(path):
     model = ml.ECGModel()
     model.to(device)
     model.load_state_dict(torch.load(path, map_location=torch.device(device)))
-    test_out, test_accuracy, predict_vec = ml.evaluate(model, test_loader, criterion, device, mode='test')
+    test_out, test_accuracy,predict_vec = ml.evaluate(model, test_loader, criterion, device,mode='test')
     predict_vec = np.array(predict_vec)
     print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
     plot_confusion_matrix(test_label_array, predict_vec, 49)
