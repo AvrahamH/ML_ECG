@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import StepLR
 import argparse
 # import scipy.signal as signal
 import matplotlib
-# from sklearn.metrics import confusion_matrix, plot_confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay
 
 # Define the ECG dataset
 class EcgDataset(Dataset):
@@ -45,7 +45,8 @@ class EcgDataset(Dataset):
                 self.labels[i][self.label_map[label]] = 1
 
 
-device = torch.device('cuda:0,1' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
+classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
+device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
 
 # Define the model architecture
 class ECGModel(nn.Module):
@@ -81,6 +82,7 @@ class ECGModel(nn.Module):
         self.bn9 = nn.BatchNorm1d(512)
         self.dropout3 = nn.Dropout(0.5)
         self.fc3 = nn.Linear(512, 7)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.conv1(x)
@@ -146,24 +148,38 @@ def train(model, train_loader, criterion, optimizer, device):
     return running_loss / len(train_loader), accuracy
 
 
-def evaluate(model, val_loader, criterion, device):
+def evaluate(model, val_loader, criterion, device, test = 0):
     model.eval()
     with torch.no_grad():
         correct = 0
         total = 0
         running_loss = 0.0
+        total_labels = np.empty((0,7))
+        total_predict = np.empty((0,7))
         for inputs, labels in val_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             running_loss += loss.item()
+            outputs = model.sigmoid(outputs)
             predicted = (outputs > 0.5).float()  # Round the outputs to 0 or 1
             total += labels.size(0) * labels.size(1)
             correct += (predicted == labels).sum().item()
+            total_labels = np.vstack((total_labels,labels.cpu().numpy()))
+            total_predict = np.vstack((total_predict,predicted.cpu().numpy()))
         accuracy = 100 * correct / total
+        if test:
+            disp = ConfusionMatrixDisplay.from_predictions(
+                total_labels.argmax(axis=1),
+                total_predict.argmax(axis=1),
+                display_labels=classes,
+                cmap=plt.cm.Blues,
+                # normalize='all',
+            )
+            plt.savefig(f'cm_ft_2.png')
+
     return running_loss / len(val_loader), accuracy
 
-classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -190,10 +206,6 @@ if __name__ == "__main__":
     matplotlib.use('Agg')   # used for training on a remote station
 
     model = ECGModel()
-    if fine_tune:
-        model = model.load_state_dict(torch.load(args.model_path, map_location=device))
-    model.to(device)
-
     # Define the loss function and optimizer
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
@@ -201,13 +213,19 @@ if __name__ == "__main__":
     num_epochs = args.epochs
     train_losses = []
     val_losses = []
+
+    if fine_tune or args.phase == 'test':
+        if args.phase == 'test':
+            device = torch.device('cpu')
+        model.load_state_dict(torch.load(args.model_path, map_location=device))
+    model.to(device, non_blocking=True)
     
     # Evaluate the model on the test dataset
     if args.phase == "test":
         test_dataset = EcgDataset(test_path)
         test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
         
-        test_out, test_accuracy = evaluate(model, test_loader, criterion, device)
+        test_out, test_accuracy = evaluate(model, test_loader, criterion, device, test=1)
         print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
 
     # Train the model on the ECG data
@@ -245,10 +263,3 @@ if __name__ == "__main__":
         plt.legend()
         plt.title(f'Loss Curve ({now})')
         plt.savefig(f'loss_plot_{epoch}_{now}_{args.phase}.png')
-
-    # plt.show()
-
-    # disp = plot_confusion_matrix(cm, classes=classes, normalize=True,
-    #                             title='Normalized confusion matrix')
-    # disp.ax_.set_title('Normalized confusion matrix')
-    # plt.show()

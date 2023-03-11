@@ -3,7 +3,6 @@ import wfdb
 import os
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay  ## NEED FOR CONFUSION MATRIX
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 import numpy as np
 from preprocess import split_data, load_files
 import torch.nn as nn
@@ -13,7 +12,7 @@ from torch.optim.lr_scheduler import StepLR
 import argparse
 import ML_model_2 as ml
 
-device = torch.device('cuda:0,1' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
+device = torch.device('cpu')
 
 classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 #
@@ -24,8 +23,10 @@ def plot_confusion_matrix(test_label_array, predict_vec, num_epochs):
     axes = axes.ravel()
     for i in range(7):
         disp = ConfusionMatrixDisplay(confusion_matrix(test_label_array[:,i],
-                                                       predict_vec[:,i]),
-                                      display_labels=[0, i])
+                                                        predict_vec[:,i]),
+                                                        display_labels=[0, i], 
+                                                        cmap=plt.cm.Blues,
+                                                        normalize='all')
         disp.plot(ax=axes[i], values_format='.4g')
         disp.ax_.set_title(f'{classes[i]}')
         if i < 10:
@@ -41,18 +42,18 @@ def plot_confusion_matrix(test_label_array, predict_vec, num_epochs):
 
 
 def run_test(path):
-    # criterion = nn.BCEWithLogitsLoss()
-    # test_path = f"WFDB/test"
-    # test_dataset = ml.EcgDataset(test_path)
-    # test_loader = DataLoader(test_dataset, batch_size=64, num_workers=4, shuffle=False)
-    # test_label_array = np.array(test_loader.dataset.labels)
-    # model = ml.ECGModel()
-    # model.to(device)
-    # model.load_state_dict(torch.load(path, map_location=torch.device(device)))
-    # test_out, test_accuracy,predict_vec = ml.evaluate(model, test_loader, criterion, device,mode='test')
-    # predict_vec = np.array(predict_vec)
-    #
-    # print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+    criterion = nn.BCEWithLogitsLoss()
+    test_path = f"WFDB/test"
+    test_dataset = ml.EcgDataset(test_path)
+    test_loader = DataLoader(test_dataset, batch_size=64, num_workers=4, shuffle=False)
+    test_label_array = np.array(test_loader.dataset.labels)
+    model = ml.ECGModel()
+    model.to(device)
+    model.load_state_dict(torch.load(path, map_location=torch.device(device)))
+    test_out, test_accuracy,predict_vec = ml.evaluate(model, test_loader, criterion, device,mode='test')
+    predict_vec = np.array(predict_vec)
+    
+    print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
     predict_vec = np.loadtxt('predict_vec.txt')
     test_label_array = np.loadtxt('test_label_array.txt')
     plot_confusion_matrix(test_label_array, predict_vec, 42)
@@ -61,4 +62,4 @@ def run_test(path):
 
 
 if __name__ == '__main__':
-    run_test('ecg_model_42_08_03_23-52.pt')
+    run_test('/Users/dortau/Documents/TAU/סמסטר ז׳/הולכה חשמלית/ecg_model_42_08_03_23-52.pt')

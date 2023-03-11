@@ -128,7 +128,7 @@ def zero_padding(matrix, X = 5000):
     return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
 
 
-def load_files(path, fine_tune):
+def load_files(path, fine_tune, max_count=7500):
     """
     This functions takes the dictionary we extracted from the header files and splits the data to sets with labels
     we can also put boundary for the amount of files with the same label
@@ -140,7 +140,7 @@ def load_files(path, fine_tune):
 
     # while fine tuning we want to use only signals that aren't NSR
     if fine_tune:
-        fine_tune.pop("426783006")
+        max_count = 1500
 
     for key, val in seven_most_common_files.items():
         count[key] = 0
@@ -151,6 +151,8 @@ def load_files(path, fine_tune):
                 valid_file_dic[file] = []
                 valid_file_dic[file].append(key)
                 count[key] += 1
+            if count[key] == max_count:
+                break
     
     # extracting the data from the files with the wfdb library and putting it as a list with the labels of the files
     # if the file data isn't 5000 x 12 pad with zeros
