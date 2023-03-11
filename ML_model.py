@@ -12,17 +12,16 @@ from torch.optim.lr_scheduler import StepLR
 import argparse
 # import scipy.signal as signal
 import matplotlib
-# from torch.nn.parallel import DistributedDataParallel
 # from sklearn.metrics import confusion_matrix, plot_confusion_matrix
 
 # Define the ECG dataset
 class EcgDataset(Dataset):
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, fine_tune = 0):
         self.data_dir = data_dir
         self.samples = []
         self.labels = []
         self.label_map = {'426783006': 0, '164865005': 1, '39732003': 2, '164951009': 3, '164873001': 4, '164934002': 5, '164861001': 6}
-        self.load_data()
+        self.load_data(fine_tune)
 
     def __len__(self):
         return len(self.samples)
@@ -37,9 +36,9 @@ class EcgDataset(Dataset):
         # the samples need to be permuted because the conv layer is taking the first input as the amount of channels
         return torch.from_numpy(np.array(sample)).float(), torch.tensor(label).float()
 
-    def load_data(self):
+    def load_data(self, fine_tune):
         # Load the ECG signals and labels using the wfdb package
-        self.samples, labels = load_files(self.data_dir)
+        self.samples, labels = load_files(self.data_dir, fine_tune)
         self.labels = [[0]*7 for i in labels]
         for i, sub_labels in enumerate(labels):
             for label in sub_labels:
@@ -169,15 +168,17 @@ classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i','--input', type=str, default='WFDB', help='Directory for data dir')
-    parser.add_argument('--phase', type=str, default='train', help='Phase: train or test')
-    parser.add_argument('--epochs', type=int, default=40, help='Training epochs')
-    parser.add_argument('--resume', default=False, action='store_true', help='Resume')
+    parser.add_argument('-o','--output', type=str, default='', help='Directory for output dir')
+    parser.add_argument('--phase', type=str, default='train', help='Phase: train/test/fine_tune')
+    parser.add_argument('--epochs', type=int, default=50, help='Training epochs')
     parser.add_argument('--model-path', type=str, default='', help='Path to saved model')
     return parser.parse_args()
 
 
 if __name__ == "__main__":
-    path = "WFDB"
+    args = parse_args()
+    path = args.input
+    fine_tune = args.phase == "fine_tune"
     split_data(path, 7500)
 
     train_path = f"{path}/train"
@@ -186,60 +187,65 @@ if __name__ == "__main__":
     print("Number of files in each dataset:\ntrain={}, validation={}, test={}"\
           .format(len(os.listdir(train_path))//2,len(os.listdir(val_path))//2, len(os.listdir(test_path))//2))
 
-    # Create PyTorch data loaders for the ECG data
-    train_dataset = EcgDataset(train_path)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    matplotlib.use('Agg')   # used for training on a remote station
 
-    val_dataset = EcgDataset(val_path)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-
-    test_dataset = EcgDataset(test_path)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+    model = ECGModel()
+    if fine_tune:
+        model = model.load_state_dict(torch.load(args.model_path, map_location=device))
+    model.to(device)
 
     # Define the loss function and optimizer
-    model = ECGModel()
-    # model = DistributedDataParallel(model)
-    model.to(device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
     scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
-    num_epochs = 250
+    num_epochs = args.epochs
     train_losses = []
     val_losses = []
-    # Train the model on the ECG data
-    try:
-        for epoch in range(num_epochs):
-            train_out,train_accuracy= train(model, train_loader, criterion, optimizer, device)
-            train_losses.append(train_out)
-            # print('Epoch %d training loss: %.3f' % (epoch + 1, train_out))
-            # print('Epoch %d training accuracy: %.2f%%' % (epoch + 1, train_accuracy))
-
-            # Evaluate the model on the validation set
-            val_out, accuracy = evaluate(model, val_loader, criterion, device)
-            val_losses.append(val_out)
-            scheduler.step()
-
-            print('Epoch {}: training loss = {:.3f}, validation loss = {:.3f}, validation accuracy = {:.3f}'.format(epoch + 1, train_out, val_out, accuracy))
-    except KeyboardInterrupt:
-        print("Training stopped by keyboard interrupt")
-
-    now = datetime.datetime.now().strftime('%d_%m_%H-%M')
-    model_name = f'ecg_model_{epoch}_{now}.pt'
-    torch.save(model.state_dict(), model_name)
-
+    
     # Evaluate the model on the test dataset
-    test_out, test_accuracy = evaluate(model, test_loader, criterion, device)
-    print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+    if args.phase == "test":
+        test_dataset = EcgDataset(test_path)
+        test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+        
+        test_out, test_accuracy = evaluate(model, test_loader, criterion, device)
+        print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
 
-    # Plot and save the loss curve
-    matplotlib.use('Agg')
-    plt.plot(np.arange(epoch), train_losses, label='Training loss')
-    plt.plot(np.arange(epoch), val_losses, label='Validation loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.title(f'Loss Curve ({now})')
-    plt.savefig(f'loss_plot_{epoch}_{now}.png')
+    # Train the model on the ECG data
+    else:
+        # Create PyTorch data loaders for the ECG data
+        train_dataset = EcgDataset(train_path, fine_tune)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+
+        val_dataset = EcgDataset(val_path)
+        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+            
+        try:
+            for epoch in range(num_epochs):
+                train_out,train_accuracy= train(model, train_loader, criterion, optimizer, device)
+                train_losses.append(train_out)
+
+                # Evaluate the model on the validation set
+                val_out, accuracy = evaluate(model, val_loader, criterion, device)
+                val_losses.append(val_out)
+                scheduler.step()
+
+                print('Epoch {}: training loss = {:.3f}, validation loss = {:.3f}, validation accuracy = {:.3f}'.format(epoch + 1, train_out, val_out, accuracy))
+        except KeyboardInterrupt:
+            print("Training stopped by keyboard interrupt")
+
+        now = datetime.datetime.now().strftime('%d_%m_%H-%M')
+        model_name = f'ecg_model_{epoch}_{now}_{args.phase}.pt'
+        torch.save(model.state_dict(), model_name)
+
+        # Plot and save the loss curve
+        plt.plot(np.arange(epoch), train_losses, label='Training loss')
+        plt.plot(np.arange(epoch), val_losses, label='Validation loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.title(f'Loss Curve ({now})')
+        plt.savefig(f'loss_plot_{epoch}_{now}_{args.phase}.png')
+
     # plt.show()
 
     # disp = plot_confusion_matrix(cm, classes=classes, normalize=True,

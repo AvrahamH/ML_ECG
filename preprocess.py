@@ -128,7 +128,7 @@ def zero_padding(matrix, X = 5000):
     return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
 
 
-def load_files(path):
+def load_files(path, fine_tune):
     """
     This functions takes the dictionary we extracted from the header files and splits the data to sets with labels
     we can also put boundary for the amount of files with the same label
@@ -137,6 +137,11 @@ def load_files(path):
     seven_most_common_files = identify_top_seven_abnormalities(label_dic)
     valid_file_dic = {}
     count = {}
+
+    # while fine tuning we want to use only signals that aren't NSR
+    if fine_tune:
+        fine_tune.pop("426783006")
+
     for key, val in seven_most_common_files.items():
         count[key] = 0
         for file in val:
