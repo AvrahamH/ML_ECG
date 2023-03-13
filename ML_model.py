@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader, Dataset
 from torch.optim.lr_scheduler import StepLR
 import argparse
 import logging
-# import scipy.signal as signal
+import scipy.signal as signal
 import matplotlib
-from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 # Define the ECG dataset
 class EcgDataset(Dataset):
@@ -32,8 +32,8 @@ class EcgDataset(Dataset):
         label = self.labels[idx]
         sample = sample.transpose()
 
-        # b, a = signal.butter(5,[0.5,40],'bandpass',fs=500)
-        # sample = [signal.lfilter(b, a, sample[i]) for i in range(len(sample))]
+        b, a = signal.butter(5,[0.5,100],'bandpass',fs=500)
+        sample = [signal.lfilter(b, a, sample[i]) for i in range(len(sample))]
         # the samples need to be permuted because the conv layer is taking the first input as the amount of channels
         return torch.from_numpy(np.array(sample)).float(), torch.tensor(label).float()
 
@@ -47,6 +47,7 @@ class EcgDataset(Dataset):
 
 
 classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
+now = datetime.datetime.now().strftime('%d_%m_%H-%M')
 device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
 
 # Define the model architecture
@@ -149,7 +150,7 @@ def train(model, train_loader, criterion, optimizer, device):
     return running_loss / len(train_loader), accuracy
 
 
-def evaluate(model, val_loader, criterion, device, test = 0):
+def evaluate(model, val_loader, criterion, device, test = 0, output=''):
     model.eval()
     with torch.no_grad():
         correct = 0
@@ -170,14 +171,17 @@ def evaluate(model, val_loader, criterion, device, test = 0):
             total_predict = np.vstack((total_predict,predicted.cpu().numpy()))
         accuracy = 100 * correct / total
         if test:
-            disp = ConfusionMatrixDisplay.from_predictions(
+            disp = ConfusionMatrixDisplay(confusion_matrix(
                 total_labels.argmax(axis=1),
                 total_predict.argmax(axis=1),
+                labels=[0,1],
+                normalize='true'),
                 display_labels=classes,
-                cmap=plt.cm.Blues,
+                # cmap=plt.cm.Blues,
                 # normalize='all',
             )
-            plt.savefig(f'cm_ft_2.png')
+            disp.plot(cmap=plt.cm.Blues)
+            plt.savefig(f'{output}cm_{now}.png')
 
     return running_loss / len(val_loader), accuracy
 
@@ -185,7 +189,7 @@ def evaluate(model, val_loader, criterion, device, test = 0):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i','--input', type=str, default='WFDB', help='Directory for data dir')
-    parser.add_argument('-o','--output', type=str, default='', help='Directory for output dir')
+    parser.add_argument('-o','--output', type=str, default='dump', help='Directory for output dir')
     parser.add_argument('--phase', type=str, default='train', help='Phase: train/test/fine_tune')
     parser.add_argument('--epochs', type=int, default=50, help='Training epochs')
     parser.add_argument('--model-path', type=str, default='', help='Path to saved model')
@@ -203,6 +207,13 @@ if __name__ == "__main__":
     args = parse_args()
     path = args.input
     fine_tune = args.phase == "fine_tune"
+
+    if not os.path.exists(args.output):
+        os.mkdir(args.output)
+
+    output = f'{args.output}/dump_{now}/'
+    os.mkdir(output)
+
     output_path = args.output
     phase = args.phase
     num_of_epochs = args.epochs
@@ -228,7 +239,7 @@ if __name__ == "__main__":
     # Define the loss function and optimizer
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+    scheduler = StepLR(optimizer, step_size=20, gamma=0.1)
     num_epochs = args.epochs
     train_losses = []
     val_losses = []
@@ -241,13 +252,15 @@ if __name__ == "__main__":
     
     # Evaluate the model on the test dataset
     if args.phase == "test":
+        split_data(path, 7500)
         test_dataset = EcgDataset(test_path)
         test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
         print("Number of files in test:\nTest files = {}".format((
                       len(os.listdir(test_path)) // 2)))
         logger.info("Number of files in test:\nTest files = {}".format((
                       len(os.listdir(test_path)) // 2)))
-        test_out, test_accuracy = evaluate(model, test_loader, criterion, device, test=1)
+
+        test_out, test_accuracy = evaluate(model, test_loader, criterion, device, test=1, output=output)
         print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
         logger.info('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
         logger.info("End of the run")
@@ -277,15 +290,15 @@ if __name__ == "__main__":
             print("Training stopped by keyboard interrupt")
             logger.info("Training stopped by keyboard interrupt")
         now = datetime.datetime.now().strftime('%d_%m_%H-%M')
-        model_name = f'ecg_model_{epoch}_{now}_{args.phase}.pt'
+        model_name = f'{output}/ecg_model_{len(train_losses)}_{now}_{args.phase}.pt'
         logger.info(f"Run End \nsaved model name - {model_name} ")
         torch.save(model.state_dict(), model_name)
 
         # Plot and save the loss curve
-        plt.plot(np.arange(epoch), train_losses, label='Training loss')
-        plt.plot(np.arange(epoch), val_losses, label='Validation loss')
+        plt.plot(np.arange(len(train_losses)), train_losses, label='Training loss')
+        plt.plot(np.arange(len(val_losses)), val_losses, label='Validation loss')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
         plt.title(f'Loss Curve ({now})')
-        plt.savefig(f'loss_plot_{epoch}_{now}_{args.phase}.png')
+        plt.savefig(f'{output}loss_plot_{len(train_losses)}_{now}_{args.phase}.png')
