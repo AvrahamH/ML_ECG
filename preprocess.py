@@ -128,7 +128,7 @@ def zero_padding(matrix, X = 5000):
     return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
 
 
-def load_files(path, fine_tune, max_count=7500):
+def load_files(path, fine_tune, max_count=6000):
     """
     This functions takes the dictionary we extracted from the header files and splits the data to sets with labels
     we can also put boundary for the amount of files with the same label
