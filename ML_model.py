@@ -15,6 +15,12 @@ import scipy.signal as signal
 import matplotlib
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
+# global parameters used in the run
+classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
+now = datetime.datetime.now().strftime('%d_%m_%H-%M')
+device = torch.device(
+    'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
+
 
 # Define the ECG dataset
 class EcgDataset(Dataset):
@@ -221,6 +227,17 @@ def evaluate(model, val_loader, criterion, device, test=0, output=''):
     return running_loss / len(val_loader), accuracy
 
 
+def create_logger():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    start_run_time = datetime.datetime.now().strftime('%d_%m_%H-%M')
+    fh = logging.FileHandler(f'{output}/run_log_{start_run_time}.log', 'w')
+    formatter = logging.Formatter('%(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    return logger
+
+
 def parse_args():
     """
     Create an ArgumentParser object to handle command line arguments and adds command line arguments that the function expects
@@ -235,51 +252,20 @@ def parse_args():
 
 
 if __name__ == "__main__":
-    # global parameters used in the run
-    classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
-    now = datetime.datetime.now().strftime('%d_%m_%H-%M')
-    device = torch.device(
-        'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
+    # read the args and make the output folder
     args = parse_args()
-    path = args.input
+    path, output_path, phase, num_of_epochs, model_path = args.input, args.output, args.phase, args.epochs, args.model_path
     fine_tune = args.phase == "fine_tune"
     if not os.path.exists(args.output):
         os.mkdir(args.output)
-
     output = f'{args.output}/dump_{now}/'
     os.mkdir(output)
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    start_run_time = datetime.datetime.now().strftime('%d_%m_%H-%M')
-    fh = logging.FileHandler(f'{output}/run_log_{start_run_time}.log', 'w')
-    formatter = logging.Formatter('%(message)s')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    output_path = args.output
-    phase = args.phase
-    num_of_epochs = args.epochs
-    model_path = args.model_path
-    if args.phase != 'test':
-        logger.info(
-            f'input - {path},  output - {output_path}, phase - {phase}, num of epochs - {num_of_epochs}, model - {model_path}')
-    else:
-        logger.info(
-            f'input - {path},  output - {output_path}, phase - {phase}, model - {model_path}')
 
-    train_path = f"{path}/train"
-    val_path = f"{path}/validation"
-    test_path = f"{path}/test"
-    if phase != 'test':
-        print("Number of files in each dataset:\ntrain={}, validation={}, test={}" \
-              .format(len(os.listdir(train_path)) // 2, len(os.listdir(val_path)) // 2,
-                      len(os.listdir(test_path)) // 2))
-        logger.info("Number of files in each dataset:\ntrain={}, validation={}, test={}" \
-                    .format(len(os.listdir(train_path)) // 2, len(os.listdir(val_path)) // 2,
-                            len(os.listdir(test_path)) // 2))
-    matplotlib.use('Agg')  # used for training on a remote station
+    # make the logger and save all the path for the training
+    logger = create_logger()
 
+    # defines the model loss function and optimizer
     model = ECGModel()
-    # Define the loss function and optimizer
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
     scheduler = StepLR(optimizer, step_size=20, gamma=0.1)
@@ -287,6 +273,8 @@ if __name__ == "__main__":
     train_losses = []
     val_losses = []
 
+    # used for training on a remote station
+    matplotlib.use('Agg')
     if fine_tune or args.phase == 'test':
         if args.phase == 'test':
             device = torch.device('cpu')
@@ -295,7 +283,9 @@ if __name__ == "__main__":
 
     # Evaluate the model on the test dataset
     if args.phase == "test":
-        test_path = path if path != 'WFDB' else test_path
+        logger.info(
+            f'input - {path},  output - {output_path}, phase - {phase}, model - {model_path}')
+        test_path = path if path != 'WFDB' else f"{path}/train"
         test_dataset = EcgDataset(test_path)
         test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
         print("Number of files in test:\nTest files = {}".format((
@@ -310,6 +300,16 @@ if __name__ == "__main__":
 
     # Train the model on the ECG data
     else:
+        # create the path for all the folders of the training
+        train_path, val_path, test_path = f"{path}/train", f"{path}/validation", f"{path}/test"
+        logger.info(
+            f'input - {path},  output - {output_path}, phase - {phase}, num of epochs - {num_of_epochs}, model - {model_path}')
+        print("Number of files in each dataset:\ntrain={}, validation={}, test={}" \
+              .format(len(os.listdir(train_path)) // 2, len(os.listdir(val_path)) // 2,
+                      len(os.listdir(test_path)) // 2))
+        logger.info("Number of files in each dataset:\ntrain={}, validation={}, test={}" \
+                    .format(len(os.listdir(train_path)) // 2, len(os.listdir(val_path)) // 2,
+                            len(os.listdir(test_path)) // 2))
         split_data(path, 7500)
         # Create PyTorch data loaders for the ECG data
         train_dataset = EcgDataset(train_path, fine_tune)

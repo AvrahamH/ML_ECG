@@ -4,6 +4,7 @@ import wfdb
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 def iterate_over_files(dir_path):
     """
     A function to iterate over files in a directory
@@ -53,7 +54,7 @@ def plot_histogram_of_abnormalities(dic, title):
     # Extract keys and values
     abnormalities = list(dic.keys())
     amount_of_files = list(dic.values())
-    plt.figure(figsize = (15,7))
+    plt.figure(figsize=(15, 7))
     # Create a histogram
     plt.bar(abnormalities, amount_of_files)
     plt.xticks(rotation=75, fontsize='xx-small')
@@ -65,6 +66,7 @@ def plot_histogram_of_abnormalities(dic, title):
     plt.savefig(f'{title}.png')
     plt.show()
 
+
 def identify_top_seven_abnormalities(label_dic, histogram_enable=None):
     """
     This function takes the dictionary of all the headers files and retunes a dictionary with only the 7 most common Dx,
@@ -73,10 +75,11 @@ def identify_top_seven_abnormalities(label_dic, histogram_enable=None):
     classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
     seven_most_common_files = {}
     seven_most_common = sorted([key for key in label_dic.keys()], key=lambda x: len(label_dic[x]), reverse=True)[:7]
-    classes_by_key = {key : classes[i] for i,key in enumerate(seven_most_common)}
+    classes_by_key = {key: classes[i] for i, key in enumerate(seven_most_common)}
     if histogram_enable:
         histogram_by_abnormalities = {key: len(label_dic[key]) for key in label_dic.keys()}
-        histogram_by_abnormalities_seven_most_common = {classes_by_key[key]: len(label_dic[key]) for key in seven_most_common}
+        histogram_by_abnormalities_seven_most_common = {classes_by_key[key]: len(label_dic[key]) for key in
+                                                        seven_most_common}
         plot_histogram_of_abnormalities(histogram_by_abnormalities, "Amount of files per abnormality")
         plot_histogram_of_abnormalities(histogram_by_abnormalities_seven_most_common,
                                         "Amount of files per abnormality - "
@@ -84,6 +87,7 @@ def identify_top_seven_abnormalities(label_dic, histogram_enable=None):
     for key in seven_most_common:
         seven_most_common_files[key] = label_dic[key]
     return seven_most_common_files
+
 
 def split_data(path, max_count):
     if os.path.exists(f'{path}/train'):
@@ -94,32 +98,32 @@ def split_data(path, max_count):
         os.mkdir(f'{path}/test')
 
     label_dic = create_dict_from_header(path)
-    seven_most_common_files = identify_top_seven_abnormalities(label_dic,histogram_enable=True)
+    seven_most_common_files = identify_top_seven_abnormalities(label_dic, histogram_enable=True)
 
     # iterate over the abnormalities and split into folders (least common disease first)
-    for key in sorted(seven_most_common_files, key = lambda key: len(seven_most_common_files[key])):
+    for key in sorted(seven_most_common_files, key=lambda key: len(seven_most_common_files[key])):
         val = seven_most_common_files[key]
         for count, file in enumerate(val):
-            if count > max_count:       # limiting the amount of files for each diagnosis
+            if count > max_count:  # limiting the amount of files for each diagnosis
                 break
             if not os.path.exists(f"{path}/HR{file}.mat"):
                 continue
-            if count <= 0.7*len(val):
+            if count <= 0.7 * len(val):
                 os.replace(f"{path}/HR{file}.mat", f"{path}/train/HR{file}.mat")
                 os.replace(f"{path}/HR{file}.hea", f"{path}/train/HR{file}.hea")
-            elif count <= 0.85*len(val):
+            elif count <= 0.85 * len(val):
                 os.replace(f"{path}/HR{file}.mat", f"{path}/validation/HR{file}.mat")
                 os.replace(f"{path}/HR{file}.hea", f"{path}/validation/HR{file}.hea")
             else:
                 os.replace(f"{path}/HR{file}.mat", f"{path}/test/HR{file}.mat")
                 os.replace(f"{path}/HR{file}.hea", f"{path}/test/HR{file}.hea")
-    
 
-def zero_padding(matrix, X = 5000):
+
+def zero_padding(matrix, X=5000):
     """
     Pads a matrix with zeros for size X until it reaches a size of 5000 on 12.
     """
-    return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
+    return np.pad(matrix, ((0, X - matrix.shape[0]), (0, 0)), mode='constant', constant_values=0)
 
 
 def load_files(path, fine_tune, max_count=6000):
@@ -147,7 +151,7 @@ def load_files(path, fine_tune, max_count=6000):
                 count[key] += 1
             if count[key] == max_count:
                 break
-    
+
     # extracting the data from the files with the wfdb library and putting it as a list with the labels of the files
     # if the file data isn't 5000 x 12 pad with zeros
     data = [zero_padding(wfdb.rdsamp(f"{path}//HR{key}")[0]) for key in valid_file_dic.keys()]
