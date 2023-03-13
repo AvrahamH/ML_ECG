@@ -118,13 +118,6 @@ def split_data(path, max_count):
 def zero_padding(matrix, X = 5000):
     """
     Pads a matrix with zeros for size X until it reaches a size of 5000 on 12.
-
-    Args:
-    matrix (numpy.ndarray): Input matrix to pad with zeros.
-    X (int): Size of padding. Default is 12.
-
-    Returns:
-    numpy.ndarray: The padded matrix.
     """
     return np.pad(matrix,((0,X - matrix.shape[0]),(0,0)),mode='constant',constant_values=0)
 
