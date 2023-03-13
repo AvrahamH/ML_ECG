@@ -171,14 +171,27 @@ def evaluate(model, val_loader, criterion, device, test = 0, output=''):
             total_predict = np.vstack((total_predict,predicted.cpu().numpy()))
         accuracy = 100 * correct / total
         if test:
+            cm = confusion_matrix(
+                total_labels.argmax(axis=1),
+                total_predict.argmax(axis=1),
+                normalize='true')
+            cm = cm.round(decimals=2)
+            logger.info("Confusion matrix:")
+            tab = '\t'
+            logger.info(f"{tab*20}Predicted labels")
+            classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
+            str = "True labels"
+            logger.info(f"ֿ{str:<21}{classes[0]:<20}{classes[1]:<20}{classes[2]:<20}{classes[3]:<20}{classes[4]:<20}{classes[5]:<20}{classes[6]:<20}")
+            for i, label in enumerate(classes):
+                logger.info(f"{label:<20}{cm[i][0]:<20}{cm[i][1]:<20}{cm[i][2]:<20}{cm[i][3]:<20}{cm[i][4]:<20}{cm[i][5]:<20}{cm[i][6]:<20}")
+
+            # tn, fp, fn, tp = cm.ravel()
+            # logger.info(f"TN - {tn}, FP - {fp}, FN - {fn}, TP - {tp}")
             disp = ConfusionMatrixDisplay(confusion_matrix(
                 total_labels.argmax(axis=1),
                 total_predict.argmax(axis=1),
-                labels=[0,1],
                 normalize='true'),
-                display_labels=classes,
-                # cmap=plt.cm.Blues,
-                # normalize='all',
+                display_labels=classes
             )
             disp.plot(cmap=plt.cm.Blues)
             plt.savefig(f'{output}cm_{now}.png')
@@ -197,23 +210,21 @@ def parse_args():
 
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    start_run_time = datetime.datetime.now().strftime('%d_%m_%H-%M')
-    fh = logging.FileHandler(f'run_log_{start_run_time}.log', 'w')
-    formatter = logging.Formatter('%(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
     args = parse_args()
     path = args.input
     fine_tune = args.phase == "fine_tune"
-
     if not os.path.exists(args.output):
         os.mkdir(args.output)
 
     output = f'{args.output}/dump_{now}/'
     os.mkdir(output)
-
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    start_run_time = datetime.datetime.now().strftime('%d_%m_%H-%M')
+    fh = logging.FileHandler(f'{output}/run_log_{start_run_time}.log', 'w')
+    formatter = logging.Formatter('%(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
     output_path = args.output
     phase = args.phase
     num_of_epochs = args.epochs
@@ -257,12 +268,12 @@ if __name__ == "__main__":
         test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
         print("Number of files in test:\nTest files = {}".format((
                       len(os.listdir(test_path)) // 2)))
-        logger.info("Number of files in test:\nTest files = {}".format((
+        logger.info("Number of files in test: {}".format((
                       len(os.listdir(test_path)) // 2)))
 
         test_out, test_accuracy = evaluate(model, test_loader, criterion, device, test=1, output=output)
         print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
-        logger.info('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+        logger.info('\nTest Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
         logger.info("End of the run")
 
     # Train the model on the ECG data
