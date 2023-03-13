@@ -234,7 +234,7 @@ if __name__ == "__main__":
     else:
         logger.info(
             f'input - {path},  output - {output_path}, phase - {phase}, model - {model_path}')
-    split_data(path, 7500)
+
 
     train_path = f"{path}/train"
     val_path = f"{path}/validation"
@@ -263,7 +263,7 @@ if __name__ == "__main__":
     
     # Evaluate the model on the test dataset
     if args.phase == "test":
-        split_data(path, 7500)
+        test_path = path if path !='WFDB' else test_path
         test_dataset = EcgDataset(test_path)
         test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
         print("Number of files in test:\nTest files = {}".format((
@@ -278,6 +278,7 @@ if __name__ == "__main__":
 
     # Train the model on the ECG data
     else:
+        split_data(path, 7500)
         # Create PyTorch data loaders for the ECG data
         train_dataset = EcgDataset(train_path, fine_tune)
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
