@@ -10,6 +10,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from torch.optim.lr_scheduler import StepLR
 import argparse
+import logging
 # import scipy.signal as signal
 import matplotlib
 from sklearn.metrics import ConfusionMatrixDisplay
@@ -192,24 +193,42 @@ def parse_args():
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    start_run_time = datetime.datetime.now().strftime('%d_%m_%H-%M')
+    fh = logging.FileHandler(f'run_log_{start_run_time}.log', 'w')
+    formatter = logging.Formatter('%(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
     args = parse_args()
     path = args.input
     fine_tune = args.phase == "fine_tune"
+    output_path = args.output
+    phase = args.phase
+    num_of_epochs = args.epochs
+    model_path = args.model_path
+    if args.phase != 'test':
+        logger.info(f'input - {path},  output - {output_path}, phase - {phase}, num of epochs - {num_of_epochs}, model - {model_path}')
+    else:
+        logger.info(
+            f'input - {path},  output - {output_path}, phase - {phase}, model - {model_path}')
     split_data(path, 7500)
 
     train_path = f"{path}/train"
     val_path = f"{path}/validation"
     test_path = f"{path}/test"
-    print("Number of files in each dataset:\ntrain={}, validation={}, test={}"\
-          .format(len(os.listdir(train_path))//2,len(os.listdir(val_path))//2, len(os.listdir(test_path))//2))
-
+    if phase != 'test':
+        print("Number of files in each dataset:\ntrain={}, validation={}, test={}"\
+              .format(len(os.listdir(train_path))//2,len(os.listdir(val_path))//2, len(os.listdir(test_path))//2))
+        logger.info("Number of files in each dataset:\ntrain={}, validation={}, test={}"\
+              .format(len(os.listdir(train_path))//2,len(os.listdir(val_path))//2, len(os.listdir(test_path))//2))
     matplotlib.use('Agg')   # used for training on a remote station
 
     model = ECGModel()
     # Define the loss function and optimizer
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
-    scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
     num_epochs = args.epochs
     train_losses = []
     val_losses = []
@@ -224,9 +243,14 @@ if __name__ == "__main__":
     if args.phase == "test":
         test_dataset = EcgDataset(test_path)
         test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-        
+        print("Number of files in test:\nTest files = {}".format((
+                      len(os.listdir(test_path)) // 2)))
+        logger.info("Number of files in test:\nTest files = {}".format((
+                      len(os.listdir(test_path)) // 2)))
         test_out, test_accuracy = evaluate(model, test_loader, criterion, device, test=1)
         print('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+        logger.info('Test Loss: {:.4f}, Test Accuracy: {:.2f}%'.format(test_out, test_accuracy))
+        logger.info("End of the run")
 
     # Train the model on the ECG data
     else:
@@ -248,11 +272,13 @@ if __name__ == "__main__":
                 scheduler.step()
 
                 print('Epoch {}: training loss = {:.3f}, validation loss = {:.3f}, validation accuracy = {:.3f}'.format(epoch + 1, train_out, val_out, accuracy))
+                logger.info('Epoch {}: training loss = {:.3f}, validation loss = {:.3f}, validation accuracy = {:.3f}'.format(epoch + 1, train_out, val_out, accuracy))
         except KeyboardInterrupt:
             print("Training stopped by keyboard interrupt")
-
+            logger.info("Training stopped by keyboard interrupt")
         now = datetime.datetime.now().strftime('%d_%m_%H-%M')
         model_name = f'ecg_model_{epoch}_{now}_{args.phase}.pt'
+        logger.info(f"Run End \nsaved model name - {model_name} ")
         torch.save(model.state_dict(), model_name)
 
         # Plot and save the loss curve

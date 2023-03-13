@@ -65,17 +65,18 @@ def plot_histogram_of_abnormalities(dic, title):
     plt.savefig(f'{title}.png')
     plt.show()
 
-
 def identify_top_seven_abnormalities(label_dic, histogram_enable=None):
     """
     This function takes the dictionary of all the headers files and retunes a dictionary with only the 7 most common Dx,
     if enabled, this function can also print the histogram of the amount of files per abnormality
     """
+    classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
     seven_most_common_files = {}
     seven_most_common = sorted([key for key in label_dic.keys()], key=lambda x: len(label_dic[x]), reverse=True)[:7]
+    classes_by_key = {key : classes[i] for i,key in enumerate(seven_most_common)}
     if histogram_enable:
         histogram_by_abnormalities = {key: len(label_dic[key]) for key in label_dic.keys()}
-        histogram_by_abnormalities_seven_most_common = {key: len(label_dic[key]) for key in seven_most_common}
+        histogram_by_abnormalities_seven_most_common = {classes_by_key[key]: len(label_dic[key]) for key in seven_most_common}
         plot_histogram_of_abnormalities(histogram_by_abnormalities, "Amount of files per abnormality")
         plot_histogram_of_abnormalities(histogram_by_abnormalities_seven_most_common,
                                         "Amount of files per abnormality - "
@@ -140,7 +141,7 @@ def load_files(path, fine_tune, max_count=7500):
 
     # while fine tuning we want to use only signals that aren't NSR
     if fine_tune:
-        max_count = 1500
+        max_count = 4000
 
     for key, val in seven_most_common_files.items():
         count[key] = 0
