@@ -287,8 +287,9 @@ if __name__ == "__main__":
     # Train the model on the ECG data
     if not args.phase == "test":
         train_path, val_path, test_path = f"{path}/train", f"{path}/validation", f"{path}/test"
+        logger.info(f"Begin {args.phase}")
         logger.info(
-            f'input - {path},  output - {output_path}, phase - {phase}, num of epochs - {num_of_epochs}, model - {model_path}')
+            f'input - {path}, output - {output_path}, phase - {phase}, num of epochs - {num_of_epochs}, model - {model_path}')
         print("Number of files in each dataset:\ntrain={}, validation={}, test={}" \
               .format(len(os.listdir(train_path)) // 2, len(os.listdir(val_path)) // 2,
                       len(os.listdir(test_path)) // 2))
@@ -337,7 +338,8 @@ if __name__ == "__main__":
         plt.savefig(f'{output}loss_plot_{len(train_losses)}_{now}_{args.phase}.png')
 
     # Evaluate the model on the test dataset
-    # logger.info(f'input - {path},  output - {output_path}, phase - {phase}, model - {model_path}')
+    logger.info(f"Begin test")
+    logger.info(f'input - {path}, output - {output_path}, phase - {phase}, model - {model_path}')
     test_path = path if path != 'WFDB' else f"{path}/train"
     test_dataset = EcgDataset(test_path)
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
