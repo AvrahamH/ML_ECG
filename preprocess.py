@@ -66,13 +66,14 @@ def plot_histogram_of_abnormalities(dic, title):
     plt.savefig(f'{title}.png')
     plt.show()
 
+classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
+abnormalities = ['426783006', '164865005', '39732003', '164951009', '164873001', '164934002','164861001']
 
-def identify_top_seven_abnormalities(label_dic, histogram_enable=None):
+def identify_top_seven_abnormalities(label_dic, phase, histogram_enable=None):
     """
     This function takes the dictionary of all the headers files and retunes a dictionary with only the 7 most common Dx,
     if enabled, this function can also print the histogram of the amount of files per abnormality
     """
-    classes = ['NSR', 'MI', 'LAD', 'abQRS', 'LVH', 'TAb', 'MIs']
     seven_most_common_files = {}
     seven_most_common = sorted([key for key in label_dic.keys()], key=lambda x: len(label_dic[x]), reverse=True)[:7]
     classes_by_key = {key: classes[i] for i, key in enumerate(seven_most_common)}
@@ -125,47 +126,38 @@ def zero_padding(matrix, X=5000):
     """
     return np.pad(matrix, ((0, X - matrix.shape[0]), (0, 0)), mode='constant', constant_values=0)
 
-def scaling(X, sigma=0.1):
-    scalingFactor = np.random.normal(loc=1.0, scale=sigma, size=(1, X.shape[1]))
-    myNoise = np.matmul(np.ones((X.shape[0], 1)), scalingFactor)
-    return X * myNoise
-
-def scaling(X, sigma=0.1):
-    scalingFactor = np.random.normal(loc=1.0, scale=sigma, size=(1, X.shape[1]))
-    myNoise = np.matmul(np.ones((X.shape[0], 1)), scalingFactor)
-    return X * myNoise
-
 
 def shift(sig, interval=20):
-    for col in range(sig.shape[1]):
-        offset = np.random.choice(range(-interval, interval))
-        sig[:, col] += offset / 1000
+    offset = np.random.choice(range(-interval, interval))
+    sig = np.roll(sig, offset, axis=0)
     return sig
 
-def shift(sig, interval=20):
-    for col in range(sig.shape[1]):
-        offset = np.random.choice(range(-interval, interval))
-        sig[:, col] += offset / 1000
-    return sig
 
-def load_files(path, fine_tune, max_count=6000):
+def load_files(path, phase, max_count=7500):
     """
     This functions takes the dictionary we extracted from the header files and splits the data to sets with labels
     we can also put boundary for the amount of files with the same label
     """
-    label_dic = create_dict_from_header(path)
-    seven_most_common_files = identify_top_seven_abnormalities(label_dic)   # keys=abnormalities, vals=file names
-    valid_file_dic = {}                                                     # keys=file names, vals=Dx for this file
+    label_dic = create_dict_from_header(path)   # keys=all abnormalities in path, vals=file names
+    file_dict = {}                              # keys=only 7 abnormalities, vals=file names
+    valid_file_dic = {}                         # keys=file names, vals=Dx for this file (from the 7)
+    file_count = {}
     count = {}
+    for key in abnormalities:
+        file_dict[key] = label_dic[key]
+        for file in file_dict[key]:
+            file_count[file] = 1 if file not in file_count.keys() else file_count[file] + 1
+
 
     # while fine tuning we want to use only signals that aren't NSR
-    if fine_tune:
-        max_count = 6000
-        threshold = 4000
+    if phase == 'fine_tune':
+        max_count = max([len(file_dict[key]) for key in file_dict.keys()])
+        threshold = int(max_count/3)
+        # max_count = int(max_count/2)
         ft_files = {}
 
 
-    for key, val in seven_most_common_files.items():
+    for key, val in file_dict.items():
         count[key] = 0
 
         for file in val:
@@ -179,16 +171,17 @@ def load_files(path, fine_tune, max_count=6000):
                 break
 
         # duplicate the data and augment it when fine tuning
-        if fine_tune:
-            n_repeats = threshold // len(val) + 1
-            ft_files[key] = np.tile(val, n_repeats)[len(val):threshold]
+        if phase == 'fine_tune':
+            val = [i for i in val if file_count[i] == 1]    # duplicate only the files with a single diagnosis
+            n_repeats = threshold // len(val) + 1 if len(val) else 1
+            ft_files[key] = np.tile(val, n_repeats)[len(file_dict[key]):threshold]
 
     # extracting the data from the files with the wfdb library and putting it as a list with the labels of the files
     # if the file data isn't 5000 x 12 pad with zeros
     data = [zero_padding(wfdb.rdsamp(f"{path}//HR{key}")[0]) for key in valid_file_dic.keys()]
     labels = [valid_file_dic[key] for key in valid_file_dic.keys()]
 
-    if fine_tune:
+    if phase == 'fine_tune':
         for files in ft_files.values():
             for file in files: 
                 data.append(zero_padding(shift(wfdb.rdsamp(f"{path}//HR{file}")[0])))

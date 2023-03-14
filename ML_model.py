@@ -32,13 +32,13 @@ class EcgDataset(Dataset):
     The fine_tune flag can be set to 1 to load only a subset of the data for fine-tuning.
     """
 
-    def __init__(self, data_dir, fine_tune=0):
+    def __init__(self, data_dir, phase):
         self.data_dir = data_dir
         self.samples = []
         self.labels = []
         self.label_map = {'426783006': 0, '164865005': 1, '39732003': 2, '164951009': 3, '164873001': 4, '164934002': 5,
                           '164861001': 6}
-        self.load_data(fine_tune)
+        self.load_data(phase)
 
     def __len__(self):
         return len(self.samples)
@@ -242,9 +242,9 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(
     description='''Analyze and diagnose an ECG signal using CNN.\nUsage examples:
-    train - 'python3 ML_model.py --phase train --epochs 50'
-    fine tune on another dataset - 'python3 ML_model.py --phase fine_tune --model-path ecg_model.pt --epochs 20'
-    test the model and plot confusion matrix - 'python3 ML_model.py --phase test --model-path ecg_model.pt' ''',formatter_class=RawTextHelpFormatter)
+    train - 'python3 ECG_model.py --phase train --epochs 50'
+    fine tune on another dataset - 'python3 ECG_model.py --phase fine_tune --model-path ecg_model.pt --epochs 20'
+    test the model and plot confusion matrix - 'python3 ECG_model.py --phase test --model-path ecg_model.pt' ''', formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-i', '--input', type=str, default='WFDB', help='Directory for data dir')
     parser.add_argument('-o', '--output', type=str, default='dump', help='Directory for output dir')
     parser.add_argument('--phase', type=str, default='train', help='Phase: train/test/fine_tune')
@@ -257,10 +257,10 @@ if __name__ == "__main__":
     # read the args and make the output folder
     args = parse_args()
     path, output_path, phase, num_of_epochs, model_path = args.input, args.output, args.phase, args.epochs, args.model_path
-    fine_tune = args.phase == "fine_tune"
-    if not os.path.exists(args.output):
-        os.mkdir(args.output)
-    output = f'{args.output}/dump_{now}/'
+    fine_tune = phase == "fine_tune"
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+    output = f'{output_path}/dump_{now}/'
     os.mkdir(output)
 
     # make the logger and save all the path for the training
@@ -270,24 +270,24 @@ if __name__ == "__main__":
     model = ECGModel()
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters())
-    scheduler = StepLR(optimizer, step_size=20, gamma=0.1)
+    scheduler = StepLR(optimizer, step_size=15, gamma=0.1)
     num_epochs = args.epochs
     train_losses = []
     val_losses = []
 
     # used for training on a remote station
     matplotlib.use('Agg')
-    if fine_tune or args.phase == 'test':
-        if args.phase == 'test':
-            device = torch.device('cpu')
-        model.load_state_dict(torch.load(args.model_path, map_location=device))
+    if fine_tune or phase == 'test':
+        # if args.phase == 'test':
+        #     # device = torch.device('cpu')
+        model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device, non_blocking=True)
     
 
     # Train the model on the ECG data
-    if not args.phase == "test":
+    if not phase == "test":
         train_path, val_path, test_path = f"{path}/train", f"{path}/validation", f"{path}/test"
-        logger.info(f"Begin {args.phase}")
+        logger.info(f"Begin {phase}")
         logger.info(
             f'input - {path}, output - {output_path}, phase - {phase}, num of epochs - {num_of_epochs}, model - {model_path}')
         print("Number of files in each dataset:\ntrain={}, validation={}, test={}" \
@@ -299,10 +299,10 @@ if __name__ == "__main__":
         split_data(path, 7500)
 
         # Create PyTorch data loaders for the ECG data
-        train_dataset = EcgDataset(train_path, fine_tune)
+        train_dataset = EcgDataset(train_path, phase)
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
-        val_dataset = EcgDataset(val_path)
+        val_dataset = EcgDataset(val_path, phase)
         val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
         try:
@@ -324,7 +324,7 @@ if __name__ == "__main__":
             print("Training stopped by keyboard interrupt")
             logger.info("Training stopped by keyboard interrupt")
         now = datetime.datetime.now().strftime('%d_%m_%H-%M')
-        model_name = f'{output}/ecg_model_{len(train_losses)}_{now}_{args.phase}.pt'
+        model_name = f'{output}/ecg_model_{len(train_losses)}_{now}_{phase}.pt'
         logger.info(f"Run End \nsaved model name - {model_name} ")
         torch.save(model.state_dict(), model_name)
 
@@ -335,13 +335,13 @@ if __name__ == "__main__":
         plt.ylabel('Loss')
         plt.legend()
         plt.title(f'Loss Curve ({now})')
-        plt.savefig(f'{output}loss_plot_{len(train_losses)}_{now}_{args.phase}.png')
+        plt.savefig(f'{output}loss_plot_{len(train_losses)}_{now}_{phase}.png')
 
     # Evaluate the model on the test dataset
     logger.info(f"Begin test")
     logger.info(f'input - {path}, output - {output_path}, phase - {phase}, model - {model_path}')
-    test_path = path if path != 'WFDB' else f"{path}/train"
-    test_dataset = EcgDataset(test_path)
+    test_path = path if path != 'WFDB' else f"{path}/test"
+    test_dataset = EcgDataset(test_path, phase='test')
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
     print("Number of files in test:\nTest files = {}".format((
             len(os.listdir(test_path)) // 2)))
