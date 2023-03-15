@@ -278,8 +278,8 @@ if __name__ == "__main__":
     # used for training on a remote station
     matplotlib.use('Agg')
     if fine_tune or phase == 'test':
-        # if args.phase == 'test':
-        #     # device = torch.device('cpu')
+        if args.phase == 'test':
+            device = torch.device('cpu')
         model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device, non_blocking=True)
     
